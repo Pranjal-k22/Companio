@@ -1,46 +1,20 @@
 import { Conversation, Patient, Checkin } from '../models/index.js';
+import { createDeepgramSTTStream } from '../services/voice/stt/deepgramSTT.js';
+import { processConversationTurn } from '../services/voice/llm/healthConversationAgent.js';
 
 // In-memory active voice sessions dictionary: Map<socketId, sessionState>
 const activeSessions = new Map();
 
 /**
- * Stub STT service (Simulates Speech-To-Text pipeline delay)
+ * Conversational LLM Service Integration
  */
-async function stubSTT(chunk, socket, session) {
-  // Emit partial transcript after 150ms
-  await new Promise((resolve) => setTimeout(resolve, 150));
-  const partialText = "I took my Lisinopril medication this morning...";
-  socket.emit('transcript-partial', {
-    text: partialText,
-    isFinal: false,
-    timestamp: new Date().toISOString(),
-  });
-
-  // Emit final transcript after another 200ms
-  await new Promise((resolve) => setTimeout(resolve, 200));
-  const finalText = "I took my Lisinopril medication this morning and went for a 30-minute walk.";
-  socket.emit('transcript-final', {
-    text: finalText,
-    isFinal: true,
-    confidence: 0.96,
-    timestamp: new Date().toISOString(),
-  });
-
-  return finalText;
-}
-
-/**
- * Stub LLM service (Simulates Conversational LLM reasoning delay)
- */
-async function stubLLM(userTranscript, session, socket) {
+async function callLLM(userTranscript, session, socket) {
   socket.emit('agent-thinking', {
     status: 'THINKING',
     timestamp: new Date().toISOString(),
   });
 
-  await new Promise((resolve) => setTimeout(resolve, 300));
-
-  const responseText = "That's wonderful to hear! I've noted down your Lisinopril dose and 30-minute walk. How are your energy and sleep levels feeling today?";
+  const responseText = await processConversationTurn(userTranscript, session);
   
   // Store turn history in session context
   session.history.push({ role: 'user', content: userTranscript });
@@ -109,7 +83,19 @@ export const initVoiceSocket = (io) => {
           history: [],
           audioChunksReceived: 0,
           startedAt: new Date(),
+          sttStream: null,
         };
+
+        // Create Deepgram live STT stream controller
+        sessionState.sttStream = createDeepgramSTTStream(socket, async (finalTranscript, confidence, isUncertain) => {
+          try {
+            // Trigger LLM & TTS upon final STT result
+            const responseText = await callLLM(finalTranscript, sessionState, socket);
+            await stubTTS(responseText, socket);
+          } catch (pipelineErr) {
+            console.error('[Pipeline Error] Post-STT execution error:', pipelineErr);
+          }
+        });
 
         activeSessions.set(socket.id, sessionState);
 
@@ -128,28 +114,22 @@ export const initVoiceSocket = (io) => {
     });
 
     // 2. AUDIO CHUNK PROCESSING
-    socket.on('audio-chunk', async (chunk) => {
+    socket.on('audio-chunk', (chunk) => {
       const session = activeSessions.get(socket.id);
       if (!session) {
         return socket.emit('voice:error', { message: 'No active session found. Please start a session first.' });
       }
 
       session.audioChunksReceived++;
-      console.log(`[Voice Session] Received audio chunk #${session.audioChunksReceived} (${chunk?.byteLength || 0} bytes)`);
 
       try {
-        // Step A: STT Pipeline (Simulated)
-        const finalTranscript = await stubSTT(chunk, socket, session);
-
-        // Step B: LLM Conversation Engine (Simulated)
-        const responseText = await stubLLM(finalTranscript, session, socket);
-
-        // Step C: TTS Audio Synthesis (Simulated)
-        await stubTTS(responseText, socket);
-
+        // Forward binary audio chunk to Deepgram Live STT stream
+        if (session.sttStream) {
+          session.sttStream.sendAudioChunk(chunk);
+        }
       } catch (err) {
         console.error('[Voice Session Pipeline Error]:', err);
-        socket.emit('voice:error', { message: 'Error processing voice pipeline step.' });
+        socket.emit('stt-error', { message: 'Error processing audio chunk.' });
       }
     });
 
@@ -161,6 +141,11 @@ export const initVoiceSocket = (io) => {
       }
 
       try {
+        // Close STT stream
+        if (session.sttStream) {
+          session.sttStream.close();
+        }
+
         // Update Conversation record in MongoDB
         await Conversation.findByIdAndUpdate(session.conversationId, {
           status: 'completed',
@@ -181,6 +166,7 @@ export const initVoiceSocket = (io) => {
         });
       } catch (error) {
         console.error('[Voice Session Error] Failed to end session:', error);
+        if (session.sttStream) session.sttStream.close();
         activeSessions.delete(socket.id);
         socket.emit('session-ended', { timestamp: new Date().toISOString() });
       }
@@ -191,6 +177,7 @@ export const initVoiceSocket = (io) => {
       console.log(`[Voice Socket] Client disconnected (${socket.id}): ${reason}`);
       const session = activeSessions.get(socket.id);
       if (session) {
+        if (session.sttStream) session.sttStream.close();
         await Conversation.findByIdAndUpdate(session.conversationId, {
           status: 'interrupted',
           endedAt: new Date(),
@@ -200,5 +187,5 @@ export const initVoiceSocket = (io) => {
     });
   });
 
-  console.log('[Socket.io] Voice session manager registered with stub pipeline handlers (/voice)');
+  console.log('[Socket.io] Voice session manager registered with Deepgram STT stream (/voice)');
 };

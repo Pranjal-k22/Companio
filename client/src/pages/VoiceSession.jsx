@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { connectVoiceSocket, disconnectVoiceSocket } from '../services/socket';
-import { Mic, MicOff, HeartPulse, Activity, Cpu, Volume2, ShieldCheck, Play, Square, Terminal, LogOut } from 'lucide-react';
+import { connectVoiceSocket } from '../services/socket';
+import { useMicCapture } from '../hooks/useMicCapture';
+import { Mic, MicOff, HeartPulse, Cpu, ShieldCheck, Play, Square, Terminal, LogOut, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function VoiceSession() {
@@ -13,19 +14,35 @@ export default function VoiceSession() {
   const [sessionInfo, setSessionInfo] = useState(null);
   const [partialTranscript, setPartialTranscript] = useState('');
   const [finalTranscript, setFinalTranscript] = useState('');
+  const [confidenceScore, setConfidenceScore] = useState(null);
+  const [isUncertain, setIsUncertain] = useState(false);
   const [agentResponseText, setAgentResponseText] = useState('');
+  const [audioChunksSent, setAudioChunksSent] = useState(0);
   const [audioChunksReceived, setAudioChunksReceived] = useState(0);
   const [eventLogs, setEventLogs] = useState([]);
 
   const logContainerRef = useRef(null);
 
-  const addLog = (event, data) => {
+  const addLog = useCallback((event, data) => {
     const timestamp = new Date().toLocaleTimeString();
     setEventLogs((prev) => [
       ...prev,
       { id: Date.now() + Math.random(), timestamp, event, details: data ? JSON.stringify(data) : '' },
     ]);
-  };
+  }, []);
+
+  // Callback passed to useMicCapture when an audio chunk is captured from mic
+  const handleAudioChunk = useCallback(
+    (arrayBuffer) => {
+      if (socket && socket.connected && pipelineState === 'LISTENING') {
+        socket.emit('audio-chunk', arrayBuffer);
+        setAudioChunksSent((prev) => prev + 1);
+      }
+    },
+    [socket, pipelineState]
+  );
+
+  const { isRecording, error: micError, startRecording, stopRecording } = useMicCapture(handleAudioChunk);
 
   useEffect(() => {
     if (logContainerRef.current) {
@@ -48,12 +65,15 @@ export default function VoiceSession() {
 
     voiceSocket.on('transcript-partial', (data) => {
       setPartialTranscript(data.text);
+      if (data.confidence) setConfidenceScore(data.confidence);
       addLog('transcript-partial', data);
     });
 
     voiceSocket.on('transcript-final', (data) => {
       setPartialTranscript('');
       setFinalTranscript(data.text);
+      if (data.confidence) setConfidenceScore(data.confidence);
+      setIsUncertain(data.isUncertain || false);
       addLog('transcript-final', data);
     });
 
@@ -75,7 +95,12 @@ export default function VoiceSession() {
 
     voiceSocket.on('session-ended', (data) => {
       setPipelineState('COMPLETED');
+      stopRecording();
       addLog('session-ended', data);
+    });
+
+    voiceSocket.on('stt-error', (err) => {
+      addLog('stt-error', err);
     });
 
     voiceSocket.on('voice:error', (err) => {
@@ -91,29 +116,33 @@ export default function VoiceSession() {
       voiceSocket.off('agent-response-text');
       voiceSocket.off('agent-audio-chunk');
       voiceSocket.off('session-ended');
+      voiceSocket.off('stt-error');
       voiceSocket.off('voice:error');
     };
-  }, [token]);
+  }, [token, addLog, stopRecording]);
 
-  const handleStartSession = () => {
+  const handleStartSession = async () => {
     if (!socket) return;
     setFinalTranscript('');
+    setPartialTranscript('');
     setAgentResponseText('');
+    setAudioChunksSent(0);
     setAudioChunksReceived(0);
-    socket.emit('start-session', { type: 'daily' });
-  };
+    setConfidenceScore(null);
+    setIsUncertain(false);
 
-  const handleSimulateAudioChunk = () => {
-    if (!socket) return;
-    // Send a 512-byte dummy audio buffer
-    const dummyBuffer = new ArrayBuffer(512);
-    socket.emit('audio-chunk', dummyBuffer);
-    addLog('client:emit-audio-chunk', { size: 512 });
+    // Request Mic permission and start recording
+    const micStarted = await startRecording();
+    if (micStarted) {
+      socket.emit('start-session', { type: 'daily' });
+    }
   };
 
   const handleEndSession = () => {
-    if (!socket) return;
-    socket.emit('end-session');
+    stopRecording();
+    if (socket) {
+      socket.emit('end-session');
+    }
   };
 
   return (
@@ -125,26 +154,40 @@ export default function VoiceSession() {
             <HeartPulse className="w-6 h-6 animate-pulse" />
           </div>
           <div>
-            <h1 className="font-bold font-display text-lg tracking-tight">Real-Time Voice Pipeline Test</h1>
-            <p className="text-xs text-slate-400">Socket.io Event Flow & State Machine Debugger</p>
+            <h1 className="font-bold font-display text-lg tracking-tight">Real-Time Voice Check-in</h1>
+            <p className="text-xs text-slate-400">Deepgram STT Live Stream & Senior Voice UI</p>
           </div>
         </div>
 
         <div className="flex items-center space-x-3">
           <button
-            onClick={() => navigate('/patient/home')}
+            onClick={() => {
+              stopRecording();
+              navigate('/patient/home');
+            }}
             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 transition"
           >
             Back to Portal
           </button>
           <button
-            onClick={logout}
+            onClick={() => {
+              stopRecording();
+              logout();
+            }}
             className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition text-xs"
           >
             <LogOut className="w-4 h-4" />
           </button>
         </div>
       </header>
+
+      {/* Mic Permission Error Banner */}
+      {micError && (
+        <div className="bg-red-950/80 border-b border-red-800/80 p-4 text-center flex items-center justify-center gap-3 text-red-200 text-sm font-medium">
+          <ShieldAlert className="w-5 h-5 text-red-400 shrink-0" />
+          <span>{micError}</span>
+        </div>
+      )}
 
       {/* Main Grid Layout */}
       <main className="flex-1 max-w-6xl w-full mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -154,7 +197,7 @@ export default function VoiceSession() {
           
           {/* Status Badge Card */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 text-center">
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Voice Pipeline State</div>
+            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Voice Session State</div>
             
             <div className="inline-flex items-center justify-center">
               <span className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-2 border ${
@@ -169,6 +212,14 @@ export default function VoiceSession() {
               </span>
             </div>
 
+            {/* Mic Pulse Indicator */}
+            {isRecording && (
+              <div className="p-3 bg-teal-950/40 border border-teal-500/30 rounded-xl flex items-center justify-center gap-2 text-xs text-teal-300 font-medium">
+                <Mic className="w-4 h-4 text-teal-400 animate-bounce" />
+                <span>Microphone Active ({audioChunksSent} chunks streamed)</span>
+              </div>
+            )}
+
             {sessionInfo && (
               <div className="text-xs text-slate-400 font-mono space-y-1 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
                 <div>Session ID: <span className="text-teal-300">{sessionInfo.sessionId?.slice(0, 10)}...</span></div>
@@ -176,22 +227,14 @@ export default function VoiceSession() {
               </div>
             )}
 
-            {/* Pipeline Controls */}
+            {/* Main Action Buttons */}
             <div className="space-y-2 pt-2">
               <button
                 onClick={handleStartSession}
-                disabled={pipelineState !== 'IDLE' && pipelineState !== 'COMPLETED'}
-                className="w-full bg-teal-500 hover:bg-teal-400 disabled:opacity-40 text-slate-950 font-bold text-xs py-2.5 rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-teal-500/20"
+                disabled={isRecording || (pipelineState !== 'IDLE' && pipelineState !== 'COMPLETED')}
+                className="w-full bg-gradient-to-r from-teal-500 to-emerald-400 hover:from-teal-400 hover:to-emerald-300 disabled:opacity-40 text-slate-950 font-bold text-sm py-3 rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-teal-500/20"
               >
-                <Play className="w-4 h-4" /> Start Voice Session
-              </button>
-
-              <button
-                onClick={handleSimulateAudioChunk}
-                disabled={pipelineState === 'IDLE' || pipelineState === 'COMPLETED'}
-                className="w-full bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-teal-300 font-semibold text-xs py-2.5 rounded-xl border border-teal-500/30 transition flex items-center justify-center gap-2"
-              >
-                <Mic className="w-4 h-4 text-teal-400" /> Simulate Audio Chunk
+                <Mic className="w-5 h-5" /> Start Speaking (Mic On)
               </button>
 
               <button
@@ -199,60 +242,80 @@ export default function VoiceSession() {
                 disabled={pipelineState === 'IDLE' || pipelineState === 'COMPLETED'}
                 className="w-full bg-red-950/50 hover:bg-red-900/60 disabled:opacity-40 text-red-300 font-semibold text-xs py-2.5 rounded-xl border border-red-800/50 transition flex items-center justify-center gap-2"
               >
-                <Square className="w-4 h-4" /> End Session
+                <Square className="w-4 h-4" /> End Check-in
               </button>
             </div>
           </div>
 
-          {/* User Info */}
+          {/* User Context Info */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2 text-xs">
             <div className="flex items-center space-x-2 text-slate-300 font-semibold">
               <ShieldCheck className="w-4 h-4 text-teal-400" />
-              <span>Authenticated Socket Context</span>
+              <span>Patient Context</span>
             </div>
-            <div className="text-slate-400">User: <span className="text-white font-medium">{user?.name}</span></div>
+            <div className="text-slate-400">Patient: <span className="text-white font-medium">{user?.name}</span></div>
             <div className="text-slate-400">Role: <span className="text-teal-400 font-semibold">{user?.role}</span></div>
-            <div className="text-slate-400">Patient ID: <span className="text-slate-300">{user?.patientId || 'N/A'}</span></div>
           </div>
 
         </div>
 
-        {/* Right Column: Live Pipeline Display & Debug Log */}
+        {/* Right Column: Live Captions & Telemetry Log */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* Live Transcript & AI Output Card */}
+          {/* Live Senior Captions Card */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-            <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Live Pipeline Output</h2>
-
-            {/* STT Output */}
-            <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-400">
-                <span className="flex items-center gap-1.5 text-teal-400"><Mic className="w-3.5 h-3.5" /> STT Speech-to-Text</span>
-                <span className="text-[10px] text-slate-500">Deepgram Stream Stub</span>
-              </div>
-              
-              {partialTranscript && (
-                <p className="text-sm text-teal-300 italic animate-pulse">"{partialTranscript}"</p>
-              )}
-              {finalTranscript && (
-                <p className="text-sm text-slate-100 font-medium">"{finalTranscript}"</p>
-              )}
-              {!partialTranscript && !finalTranscript && (
-                <p className="text-xs text-slate-600">Waiting for audio chunk input...</p>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                <Mic className="w-4 h-4 text-teal-400" /> Live Captions (Senior-Friendly View)
+              </h2>
+              {confidenceScore && (
+                <span className={`text-xs px-2 py-0.5 rounded border font-semibold ${
+                  isUncertain ? 'bg-amber-950/60 text-amber-300 border-amber-800' : 'bg-teal-950/60 text-teal-300 border-teal-800'
+                }`}>
+                  Confidence: {Math.round(confidenceScore * 100)}% {isUncertain && '⚠️ Uncertain'}
+                </span>
               )}
             </div>
 
-            {/* LLM & TTS Output */}
-            <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+            {/* STT Speech Display */}
+            <div className="p-5 bg-slate-950 border border-slate-800 rounded-xl space-y-2 min-h-[100px] flex flex-col justify-center">
+              {partialTranscript && (
+                <p className="text-lg text-teal-300 font-medium italic animate-pulse">
+                  "{partialTranscript}"
+                </p>
+              )}
+              {finalTranscript && (
+                <div className="space-y-1">
+                  <p className="text-xl text-slate-100 font-semibold leading-relaxed">
+                    "{finalTranscript}"
+                  </p>
+                  {isUncertain && (
+                    <p className="text-xs text-amber-400 flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5" /> Speech was marked uncertain. AI will ask for clarification if needed.
+                    </p>
+                  )}
+                </div>
+              )}
+              {!partialTranscript && !finalTranscript && (
+                <p className="text-sm text-slate-500 italic">
+                  {isRecording ? 'Listening... Speak into your microphone.' : 'Click "Start Speaking" to begin your voice check-in.'}
+                </p>
+              )}
+            </div>
+
+            {/* AI Agent Output Display */}
+            <div className="p-5 bg-slate-950 border border-slate-800 rounded-xl space-y-2 min-h-[90px] flex flex-col justify-center">
               <div className="flex items-center justify-between text-xs font-semibold text-slate-400">
-                <span className="flex items-center gap-1.5 text-purple-400"><Cpu className="w-3.5 h-3.5" /> Conversational Agent Response</span>
+                <span className="flex items-center gap-1.5 text-emerald-400"><Cpu className="w-3.5 h-3.5" /> Agent Response</span>
                 <span className="text-[10px] text-slate-500">ElevenLabs Audio Chunks: {audioChunksReceived}</span>
               </div>
               
               {agentResponseText ? (
-                <p className="text-sm text-emerald-300 font-medium">"{agentResponseText}"</p>
+                <p className="text-base text-emerald-300 font-medium leading-snug">
+                  "{agentResponseText}"
+                </p>
               ) : (
-                <p className="text-xs text-slate-600">Waiting for AI agent response...</p>
+                <p className="text-xs text-slate-600">Waiting for agent response...</p>
               )}
             </div>
           </div>
@@ -273,10 +336,10 @@ export default function VoiceSession() {
 
             <div
               ref={logContainerRef}
-              className="h-64 bg-slate-950 border border-slate-800/80 rounded-xl p-4 overflow-y-auto space-y-2 font-mono text-xs text-slate-300"
+              className="h-48 bg-slate-950 border border-slate-800/80 rounded-xl p-4 overflow-y-auto space-y-2 font-mono text-xs text-slate-300"
             >
               {eventLogs.length === 0 ? (
-                <div className="text-slate-600 text-center pt-8">No socket events emitted yet. Click 'Start Voice Session' to initialize pipeline.</div>
+                <div className="text-slate-600 text-center pt-6">No socket events emitted yet.</div>
               ) : (
                 eventLogs.map((log) => (
                   <div key={log.id} className="flex items-start gap-2 border-b border-slate-900 pb-1">
