@@ -1,6 +1,7 @@
 import { Conversation, Patient, Checkin } from '../models/index.js';
 import { createDeepgramSTTStream } from '../services/voice/stt/deepgramSTT.js';
 import { processConversationTurn } from '../services/voice/llm/healthConversationAgent.js';
+import { runSafetyNetCheck } from '../services/safety/keywordSafetyNet.js';
 
 // In-memory active voice sessions dictionary: Map<socketId, sessionState>
 const activeSessions = new Map();
@@ -89,8 +90,12 @@ export const initVoiceSocket = (io) => {
         // Create Deepgram live STT stream controller
         sessionState.sttStream = createDeepgramSTTStream(socket, async (finalTranscript, confidence, isUncertain) => {
           try {
-            // Trigger LLM & TTS upon final STT result
-            const responseText = await callLLM(finalTranscript, sessionState, socket);
+            // Run safety net check and LLM turn processing in parallel
+            const [, responseText] = await Promise.all([
+              runSafetyNetCheck(finalTranscript, sessionState),
+              callLLM(finalTranscript, sessionState, socket),
+            ]);
+
             await stubTTS(responseText, socket);
           } catch (pipelineErr) {
             console.error('[Pipeline Error] Post-STT execution error:', pipelineErr);

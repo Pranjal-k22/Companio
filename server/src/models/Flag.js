@@ -42,6 +42,11 @@ const flagSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    source: {
+      type: String,
+      default: 'llm_tool',
+      trim: true,
+    },
     structuredEvidence: {
       type: mongoose.Schema.Types.Mixed,
     },
