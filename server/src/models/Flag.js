@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import notifyClinicianForRedFlag from '../services/escalation/notifyClinician.js';
 
 const flagSchema = new mongoose.Schema(
   {
@@ -73,9 +74,20 @@ const flagSchema = new mongoose.Schema(
   }
 );
 
-// Requirement: Add compound index on (patientId, status)
+// Compound index on (patientId, status)
 flagSchema.index({ patientId: 1, status: 1 });
 flagSchema.index({ patientId: 1, severity: 1 });
+
+// Post-save hook to automatically trigger clinician escalation notification on RED flag creation
+flagSchema.post('save', async function (doc) {
+  if ((doc.severity === 'red' || doc.severity === 'RED') && !doc.escalatedAt) {
+    try {
+      await notifyClinicianForRedFlag(doc);
+    } catch (err) {
+      console.error('[Flag Post-Save Escalation Warning]:', err.message);
+    }
+  }
+});
 
 export const Flag = mongoose.model('Flag', flagSchema);
 export default Flag;
