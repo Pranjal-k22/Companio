@@ -6,6 +6,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { connectDB } from './config/db.js';
 import healthRouter from './routes/health.js';
 import authRouter from './routes/authRoutes.js';
+import reportsRouter from './routes/reports.js';
 import { verifyToken } from './middleware/auth.js';
 import { requireRole } from './middleware/roles.js';
 import { socketAuthMiddleware } from './sockets/socketAuth.js';
@@ -32,6 +33,7 @@ app.use(express.urlencoded({ extended: true }));
 // Attach REST Routes
 app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/reports', reportsRouter);
 
 // Test Clinician-Only Protected Route (Verification for Phase 3)
 app.get('/api/test/clinician-only', verifyToken, requireRole('CLINICIAN', 'ADMIN'), (req, res) => {

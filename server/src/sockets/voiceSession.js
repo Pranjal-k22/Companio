@@ -2,6 +2,7 @@ import { Conversation, Patient, Checkin } from '../models/index.js';
 import { createDeepgramSTTStream } from '../services/voice/stt/deepgramSTT.js';
 import { processConversationTurn } from '../services/voice/llm/healthConversationAgent.js';
 import { runSafetyNetCheck } from '../services/safety/keywordSafetyNet.js';
+import { streamTTSResponse } from '../services/voice/tts/elevenLabsTTS.js';
 
 // In-memory active voice sessions dictionary: Map<socketId, sessionState>
 const activeSessions = new Map();
@@ -27,23 +28,6 @@ async function callLLM(userTranscript, session, socket) {
   });
 
   return responseText;
-}
-
-/**
- * Stub TTS service (Simulates Text-To-Speech audio synthesis delay)
- */
-async function stubTTS(responseText, socket) {
-  await new Promise((resolve) => setTimeout(resolve, 250));
-
-  // Generate 1024-byte dummy binary audio chunk buffer
-  const dummyAudioBuffer = Buffer.alloc(1024, 0x41); // Simulated PCM/MP3 audio payload
-
-  socket.emit('agent-audio-chunk', {
-    audio: dummyAudioBuffer,
-    format: 'audio/mp3',
-    isFinal: true,
-    timestamp: new Date().toISOString(),
-  });
 }
 
 /**
@@ -96,7 +80,7 @@ export const initVoiceSocket = (io) => {
               callLLM(finalTranscript, sessionState, socket),
             ]);
 
-            await stubTTS(responseText, socket);
+            await streamTTSResponse(responseText, socket);
           } catch (pipelineErr) {
             console.error('[Pipeline Error] Post-STT execution error:', pipelineErr);
           }
