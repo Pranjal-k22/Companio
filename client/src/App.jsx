@@ -5,7 +5,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import PatientHome from './pages/PatientHome';
-import VoiceSession from './pages/VoiceSession';
+import VoiceCheckIn from './pages/VoiceCheckIn';
+import CheckInComplete from './pages/CheckInComplete';
 import ClinicianDashboard from './pages/ClinicianDashboard';
 import PatientDetail from './pages/PatientDetail';
 
@@ -51,10 +52,26 @@ export default function App() {
             }
           />
           <Route
+            path="/patient/voice-checkin"
+            element={
+              <ProtectedRoute allowedRoles={['PATIENT']}>
+                <VoiceCheckIn />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/patient/voice-session"
             element={
               <ProtectedRoute allowedRoles={['PATIENT']}>
-                <VoiceSession />
+                <VoiceCheckIn />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/patient/checkin-complete"
+            element={
+              <ProtectedRoute allowedRoles={['PATIENT']}>
+                <CheckInComplete />
               </ProtectedRoute>
             }
           />
