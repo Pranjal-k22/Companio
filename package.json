@@ -1,0 +1,20 @@
+{
+  "name": "companio-monorepo",
+  "version": "1.0.0",
+  "description": "Companio - AI Voice Agent for Healthcare Monorepo",
+  "main": "server/src/server.js",
+  "scripts": {
+    "dev": "concurrently --kill-others-on-fail -n \"SERVER,CLIENT\" -c \"cyan,magenta\" \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "seed": "npm run seed --prefix server",
+    "install:all": "npm install && npm install --prefix server && npm install --prefix client",
+    "build:client": "npm run build --prefix client"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": ["ai", "healthcare", "voice-agent", "mern", "deepgram", "elevenlabs"],
+  "author": "",
+  "license": "ISC"
+}

@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 min-h-screen antialiased;
+  }
+}
+
+/* Pulse animation utility for audio waveform */
+@keyframes pulse-wave {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+
+.animate-pulse-wave {
+  animation: pulse-wave 1.2s infinite ease-in-out;
+}
