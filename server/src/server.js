@@ -7,6 +7,9 @@ import { connectDB } from './config/db.js';
 import healthRouter from './routes/health.js';
 import authRouter from './routes/authRoutes.js';
 import reportsRouter from './routes/reports.js';
+import patientsRouter from './routes/patients.js';
+import checkinsRouter from './routes/checkins.js';
+import flagsRouter from './routes/flags.js';
 import { verifyToken } from './middleware/auth.js';
 import { requireRole } from './middleware/roles.js';
 import { socketAuthMiddleware } from './sockets/socketAuth.js';
@@ -34,6 +37,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/patients', patientsRouter);
+app.use('/api/checkins', checkinsRouter);
+app.use('/api/flags', flagsRouter);
 
 // Test Clinician-Only Protected Route (Verification for Phase 3)
 app.get('/api/test/clinician-only', verifyToken, requireRole('CLINICIAN', 'ADMIN'), (req, res) => {

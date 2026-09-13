@@ -1,171 +1,278 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import API from '../services/api';
-import { Stethoscope, LogOut, Users, AlertTriangle, CheckCircle2, ShieldCheck, Activity, Terminal } from 'lucide-react';
+import {
+  Stethoscope,
+  LogOut,
+  Users,
+  AlertTriangle,
+  CheckCircle2,
+  ChevronRight,
+  RefreshCw,
+  Search,
+  Clock,
+  Pill,
+  Calendar,
+} from 'lucide-react';
 
 export default function ClinicianDashboard() {
   const { user, logout } = useAuth();
-  const [testResult, setTestResult] = useState(null);
-  const [testing, setTesting] = useState(false);
+  const navigate = useNavigate();
 
-  const testClinicianRoute = async () => {
-    setTesting(true);
+  const [patients, setPatients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const fetchPatients = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const res = await API.get('/test/clinician-only');
-      setTestResult({ success: true, data: res.data });
+      const res = await API.get('/patients');
+      if (res.data.success) {
+        setPatients(res.data.patients || []);
+      }
     } catch (err) {
-      setTestResult({
-        success: false,
-        error: err?.response?.data?.message || 'Access test failed.',
-      });
+      console.error('Error fetching patients:', err);
+      setError(err?.response?.data?.message || 'Failed to load assigned patients.');
     } finally {
-      setTesting(false);
+      setLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchPatients();
+  }, []);
+
+  // Filter patients based on search input
+  const filteredPatients = patients.filter(
+    (p) =>
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.contact?.phone?.includes(searchQuery)
+  );
+
+  // Compute summary stats
+  const totalPatients = patients.length;
+  const totalRedFlags = patients.reduce((sum, p) => sum + (p.openRedFlagsCount || 0), 0);
+  const totalYellowFlags = patients.reduce((sum, p) => sum + (p.openYellowFlagsCount || 0), 0);
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      {/* Clinician Top Header */}
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur-md px-6 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      {/* Header */}
+      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center space-x-3">
           <div className="p-2.5 bg-teal-500/10 border border-teal-500/30 rounded-xl text-teal-400">
             <Stethoscope className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="font-bold font-display text-lg tracking-tight">Clinician Portal</h1>
-            <p className="text-xs text-slate-400">Patient Overview & AI Flag Review</p>
+            <h1 className="font-bold text-lg tracking-tight text-white">Companio Clinician Portal</h1>
+            <p className="text-xs text-slate-400">AI Voice Monitoring & Clinical Report Dashboard</p>
           </div>
         </div>
 
         <div className="flex items-center space-x-4">
           <div className="text-right hidden sm:block">
             <div className="text-sm font-semibold text-white">{user?.name}</div>
-            <div className="text-xs text-teal-400 font-semibold uppercase">{user?.role}</div>
+            <div className="text-xs text-teal-400 font-medium uppercase">{user?.role}</div>
           </div>
           <button
             onClick={logout}
-            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition flex items-center gap-1.5 text-xs font-medium"
+            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition flex items-center gap-1.5 text-xs font-medium"
           >
             <LogOut className="w-4 h-4" /> Sign Out
           </button>
         </div>
       </header>
 
-      {/* Main Clinician View */}
-      <main className="flex-1 max-w-6xl w-full mx-auto p-6 space-y-6">
+      {/* Main Content */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
         
-        {/* Top Summary Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
-          <div className="p-5 bg-slate-900 border border-slate-800 rounded-2xl flex items-center space-x-4">
+        {/* Top Summary Metrics Bar */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-5 bg-slate-900/90 border border-slate-800 rounded-2xl flex items-center justify-between shadow-lg">
+            <div className="space-y-1">
+              <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Assigned Patients</div>
+              <div className="text-3xl font-extrabold text-white">{totalPatients}</div>
+            </div>
             <div className="p-3 bg-teal-500/10 text-teal-400 rounded-xl border border-teal-500/20">
               <Users className="w-6 h-6" />
             </div>
-            <div>
-              <div className="text-xs text-slate-400 font-semibold uppercase">Assigned Patients</div>
-              <div className="text-2xl font-bold text-white">3</div>
-            </div>
           </div>
 
-          <div className="p-5 bg-slate-900 border border-slate-800 rounded-2xl flex items-center space-x-4">
-            <div className="p-3 bg-red-500/10 text-red-400 rounded-xl border border-red-500/20">
+          <div className="p-5 bg-slate-900/90 border border-slate-800 rounded-2xl flex items-center justify-between shadow-lg">
+            <div className="space-y-1">
+              <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Open Red Flags</div>
+              <div className={`text-3xl font-extrabold ${totalRedFlags > 0 ? 'text-red-400' : 'text-slate-300'}`}>
+                {totalRedFlags}
+              </div>
+            </div>
+            <div className={`p-3 rounded-xl border ${totalRedFlags > 0 ? 'bg-red-500/10 text-red-400 border-red-500/30 animate-pulse' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
               <AlertTriangle className="w-6 h-6" />
             </div>
-            <div>
-              <div className="text-xs text-slate-400 font-semibold uppercase">Active Red Flags</div>
-              <div className="text-2xl font-bold text-red-400">1</div>
-            </div>
           </div>
 
-          <div className="p-5 bg-slate-900 border border-slate-800 rounded-2xl flex items-center space-x-4">
+          <div className="p-5 bg-slate-900/90 border border-slate-800 rounded-2xl flex items-center justify-between shadow-lg">
+            <div className="space-y-1">
+              <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Open Yellow Flags</div>
+              <div className={`text-3xl font-extrabold ${totalYellowFlags > 0 ? 'text-amber-400' : 'text-slate-300'}`}>
+                {totalYellowFlags}
+              </div>
+            </div>
             <div className="p-3 bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/20">
               <AlertTriangle className="w-6 h-6" />
             </div>
-            <div>
-              <div className="text-xs text-slate-400 font-semibold uppercase">Yellow Flags</div>
-              <div className="text-2xl font-bold text-amber-400">2</div>
-            </div>
-          </div>
-
-          <div className="p-5 bg-slate-900 border border-slate-800 rounded-2xl flex items-center space-x-4">
-            <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
-              <CheckCircle2 className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="text-xs text-slate-400 font-semibold uppercase">Completed Check-ins</div>
-              <div className="text-2xl font-bold text-emerald-300">30</div>
-            </div>
           </div>
         </div>
 
-        {/* Protected Clinician Route Authorization Test Card */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-slate-800 rounded-lg text-teal-400">
-                <Terminal className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-white text-base">RBAC Protection Verification</h3>
-                <p className="text-xs text-slate-400">Test backend endpoint <code className="text-teal-300">GET /api/test/clinician-only</code> with current JWT token</p>
-              </div>
-            </div>
+        {/* Control Bar: Search & Refresh */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/60 p-4 border border-slate-800 rounded-2xl">
+          <div className="relative w-full sm:w-80">
+            <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search patients..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 text-slate-200 text-sm pl-10 pr-4 py-2 rounded-xl focus:outline-none focus:border-teal-500 transition"
+            />
+          </div>
 
+          <div className="flex items-center space-x-3 w-full sm:w-auto justify-end">
             <button
-              onClick={testClinicianRoute}
-              disabled={testing}
-              className="px-4 py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 font-semibold text-xs rounded-xl transition shadow-md shadow-teal-500/20"
+              onClick={fetchPatients}
+              disabled={loading}
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 flex items-center gap-2 transition"
             >
-              {testing ? 'Testing...' : 'Test Clinician Auth'}
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
             </button>
           </div>
-
-          {testResult && (
-            <div className={`p-4 rounded-xl text-xs font-mono border ${
-              testResult.success ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-200' : 'bg-red-950/40 border-red-800/60 text-red-200'
-            }`}>
-              <pre>{JSON.stringify(testResult, null, 2)}</pre>
-            </div>
-          )}
         </div>
 
-        {/* Patient Table Placeholder (Full Dashboard built in Phase 9) */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-white text-base">Assigned Patient List</h3>
-            <span className="text-xs text-slate-400">Seeded Database Records</span>
+        {/* Loading State */}
+        {loading && (
+          <div className="py-16 text-center space-y-3">
+            <div className="w-10 h-10 border-3 border-teal-400 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <p className="text-sm text-slate-400">Loading clinician patient list & flags...</p>
           </div>
+        )}
 
-          <div className="divide-y divide-slate-800 text-xs">
-            <div className="py-3 flex items-center justify-between font-semibold text-slate-400 uppercase tracking-wider">
-              <span>Patient Name</span>
-              <span>Age</span>
-              <span>Condition / Observation</span>
-              <span>Flag Status</span>
-            </div>
-
-            <div className="py-3 flex items-center justify-between text-slate-200">
-              <div className="font-medium text-white">Robert Miller</div>
-              <div>67</div>
-              <div>Post-cardiac check & Lisinopril</div>
-              <div className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30 font-semibold">🔴 RED (Chest tightness)</div>
-            </div>
-
-            <div className="py-3 flex items-center justify-between text-slate-200">
-              <div className="font-medium text-white">Eleanor Vance</div>
-              <div>72</div>
-              <div>Hypertension & Arthritis</div>
-              <div className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">🟡 YELLOW (Knee stiffness)</div>
-            </div>
-
-            <div className="py-3 flex items-center justify-between text-slate-200">
-              <div className="font-medium text-white">Arthur Pendelton</div>
-              <div>81</div>
-              <div>Diabetes & Daily Wellness</div>
-              <div className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">🟢 NORMAL</div>
-            </div>
+        {/* Error State */}
+        {error && (
+          <div className="p-4 bg-red-950/40 border border-red-800/80 rounded-2xl text-red-200 text-sm flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
+            <div>{error}</div>
           </div>
-        </div>
+        )}
 
+        {/* Patient Cards List */}
+        {!loading && !error && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider">
+                Assigned Patients ({filteredPatients.length})
+              </h2>
+              <span className="text-xs text-slate-500">Sorted by Red Flag Severity</span>
+            </div>
+
+            {filteredPatients.length === 0 ? (
+              <div className="p-12 text-center bg-slate-900/40 border border-slate-800 rounded-2xl text-slate-400 text-sm">
+                No patients found matching your search query.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
+                {filteredPatients.map((patient) => {
+                  const hasRedFlag = patient.openRedFlagsCount > 0;
+                  const hasYellowFlag = patient.openYellowFlagsCount > 0;
+
+                  return (
+                    <div
+                      key={patient._id}
+                      onClick={() => navigate(`/clinician/patient/${patient._id}`)}
+                      className={`group cursor-pointer p-6 rounded-2xl border transition-all duration-200 shadow-md ${
+                        hasRedFlag
+                          ? 'bg-red-950/20 border-red-600/50 hover:border-red-500 hover:bg-red-950/30'
+                          : hasYellowFlag
+                          ? 'bg-amber-950/10 border-amber-500/40 hover:border-amber-400 hover:bg-amber-950/20'
+                          : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
+                      }`}
+                    >
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        {/* Patient Basic Info */}
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-3">
+                            <h3 className="text-lg font-bold text-white group-hover:text-teal-400 transition">
+                              {patient.name}
+                            </h3>
+                            <span className="px-2.5 py-0.5 bg-slate-800 text-slate-300 text-xs font-semibold rounded-full border border-slate-700">
+                              Age {patient.age}
+                            </span>
+                            {hasRedFlag && (
+                              <span className="px-2.5 py-0.5 bg-red-500/20 text-red-400 text-xs font-bold rounded-full border border-red-500/40 animate-pulse flex items-center gap-1">
+                                🔴 {patient.openRedFlagsCount} RED FLAG{patient.openRedFlagsCount > 1 ? 'S' : ''}
+                              </span>
+                            )}
+                            {!hasRedFlag && hasYellowFlag && (
+                              <span className="px-2.5 py-0.5 bg-amber-500/20 text-amber-300 text-xs font-semibold rounded-full border border-amber-500/40 flex items-center gap-1">
+                                🟡 {patient.openYellowFlagsCount} YELLOW FLAG{patient.openYellowFlagsCount > 1 ? 'S' : ''}
+                              </span>
+                            )}
+                            {!hasRedFlag && !hasYellowFlag && (
+                              <span className="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-400 text-xs font-semibold rounded-full border border-emerald-500/20 flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Stable
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-xs text-slate-400">
+                            <div className="flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-slate-500" />
+                              <span>
+                                Last Check-in:{' '}
+                                {patient.lastCheckinDate
+                                  ? new Date(patient.lastCheckinDate).toLocaleDateString(undefined, {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })
+                                  : 'No check-ins yet'}
+                              </span>
+                            </div>
+
+                            {patient.medications && patient.medications.length > 0 && (
+                              <div className="flex items-center gap-1.5">
+                                <Pill className="w-3.5 h-3.5 text-teal-400" />
+                                <span>{patient.medications.map((m) => m.name).join(', ')}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Right side CTA */}
+                        <div className="flex items-center space-x-3 self-end md:self-center">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/clinician/patient/${patient._id}`);
+                            }}
+                            className={`px-4 py-2 text-xs font-semibold rounded-xl border flex items-center gap-1.5 transition shadow-sm ${
+                              hasRedFlag
+                                ? 'bg-red-600 hover:bg-red-500 text-white border-red-500'
+                                : 'bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold border-teal-400'
+                            }`}
+                          >
+                            View Clinical Report & Trends <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );

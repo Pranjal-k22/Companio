@@ -7,6 +7,7 @@ import Register from './pages/Register';
 import PatientHome from './pages/PatientHome';
 import VoiceSession from './pages/VoiceSession';
 import ClinicianDashboard from './pages/ClinicianDashboard';
+import PatientDetail from './pages/PatientDetail';
 
 // Redirect helper component for root URL '/'
 function RootRedirect() {
@@ -64,6 +65,14 @@ export default function App() {
             element={
               <ProtectedRoute allowedRoles={['CLINICIAN', 'ADMIN']}>
                 <ClinicianDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/clinician/patient/:patientId"
+            element={
+              <ProtectedRoute allowedRoles={['CLINICIAN', 'ADMIN']}>
+                <PatientDetail />
               </ProtectedRoute>
             }
           />
