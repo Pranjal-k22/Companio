@@ -3,12 +3,39 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+  
+  html.dark {
+    color-scheme: dark;
+    background-color: #090d16;
+  }
+
+  html.light {
+    color-scheme: light;
+    background-color: #f4f6fb;
+  }
+
   body {
-    @apply bg-slate-950 text-slate-100 min-h-screen antialiased;
+    @apply antialiased font-sans min-h-screen transition-colors duration-200;
+  }
+
+  .dark body {
+    @apply bg-[#090d16] text-slate-100;
+  }
+
+  .light body {
+    @apply bg-[#f4f6fb] text-slate-800;
+  }
+
+  /* Accessibility Large Font Scale */
+  html.text-lg-accessibility {
+    font-size: 112.5%; /* Scales base rem from 16px to ~18px */
   }
 }
 
-/* Pulse animation utility for audio waveform */
+/* Audio waveform pulse animation */
 @keyframes pulse-wave {
   0%, 100% { transform: scaleY(0.3); }
   50% { transform: scaleY(1); }
@@ -16,4 +43,36 @@
 
 .animate-pulse-wave {
   animation: pulse-wave 1.2s infinite ease-in-out;
+}
+
+/* Custom Healthcare UI Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #0d1322;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #1f293d;
+  border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #0d9488;
+}
+
+.light ::-webkit-scrollbar-track {
+  background: #e2e8f0;
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+.light ::-webkit-scrollbar-thumb:hover {
+  background: #0d9488;
 }

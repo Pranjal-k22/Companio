@@ -1,4 +1,5 @@
 import { Flag } from '../../models/index.js';
+import notifyClinicianForRedFlag from '../escalation/notifyClinician.js';
 
 /**
  * High-Stakes RED Flag Keyword & Pattern Rules Specification
@@ -111,11 +112,19 @@ export async function runSafetyNetCheck(transcriptText, sessionContext) {
         { upsert: true, new: true, rawResult: true }
       );
 
+      const targetDoc = flag.value || flag;
       // If updatedExisting is true, LLM inserted it right at the same moment -> deduplicated
       if (flag.lastErrorObject?.updatedExisting) {
         console.log(`[Safety Net Atomic Deduplicated] Flag for '${match.category}' was concurrently logged by LLM.`);
-      } else {
-        createdFlags.push(flag.value);
+      } else if (targetDoc && targetDoc._id) {
+        createdFlags.push(targetDoc);
+        if (targetDoc.severity === 'red' || targetDoc.severity === 'RED') {
+          try {
+            await notifyClinicianForRedFlag(targetDoc);
+          } catch (e) {
+            console.warn('[Safety Net Escalation Warning]:', e.message);
+          }
+        }
       }
     } catch (err) {
       console.error('[Safety Net Error] Flag upsert failed:', err.message);

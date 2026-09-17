@@ -1,7 +1,19 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { HeartPulse, Lock, Mail, User, Shield, AlertCircle } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
+import {
+  HeartPulse,
+  Lock,
+  Mail,
+  User,
+  Shield,
+  AlertCircle,
+  Sun,
+  Moon,
+  ArrowRight,
+  Phone,
+} from 'lucide-react';
 
 export default function Register() {
   const [name, setName] = useState('');
@@ -9,10 +21,12 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('PATIENT');
   const [age, setAge] = useState('68');
+  const [emergencyPhone, setEmergencyPhone] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
   const { register } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -27,6 +41,7 @@ export default function Register() {
         password,
         role,
         age: role === 'PATIENT' ? parseInt(age, 10) : undefined,
+        emergencyContactPhone: emergencyPhone || undefined,
       });
 
       if (newUser.role === 'CLINICIAN' || newUser.role === 'ADMIN') {
@@ -42,80 +57,131 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 relative overflow-hidden">
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-teal-500/10 blur-[130px] rounded-full pointer-events-none" />
+    <div
+      className={`min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8 relative overflow-hidden transition-colors duration-200 ${
+        theme === 'dark' ? 'bg-[#090d16] text-slate-100' : 'bg-[#f4f6fb] text-slate-800'
+      }`}
+    >
+      <div className="absolute top-1/4 left-1/3 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-teal-500/10 blur-[150px] rounded-full pointer-events-none" />
 
-      <div className="max-w-md w-full bg-slate-900/90 border border-slate-800 backdrop-blur-xl rounded-2xl p-8 shadow-2xl space-y-6 relative z-10">
+      {/* Top Bar Theme Toggle */}
+      <div className="absolute top-6 right-6 z-20">
+        <button
+          onClick={toggleTheme}
+          className={`p-3 rounded-2xl border transition flex items-center gap-2 text-xs font-semibold ${
+            theme === 'dark'
+              ? 'bg-slate-900/80 border-slate-800 text-slate-200 hover:border-teal-500'
+              : 'bg-white border-slate-200 text-slate-700 shadow-sm hover:border-teal-500'
+          }`}
+        >
+          {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
+          <span>{theme === 'dark' ? 'Light Theme' : 'Dark Theme'}</span>
+        </button>
+      </div>
+
+      <div className={`max-w-md w-full rounded-3xl p-8 shadow-2xl border relative z-10 space-y-6 transition-all ${
+        theme === 'dark'
+          ? 'bg-slate-900/90 border-slate-800 backdrop-blur-xl'
+          : 'bg-white border-slate-200 backdrop-blur-xl'
+      }`}>
         <div className="text-center space-y-2">
-          <div className="inline-flex p-3 bg-teal-500/10 border border-teal-500/30 rounded-2xl text-teal-400 mb-1">
-            <HeartPulse className="w-8 h-8 animate-pulse" />
+          <div className="inline-flex p-3 bg-gradient-to-tr from-teal-500 to-emerald-400 text-slate-950 rounded-2xl shadow-lg shadow-teal-500/20 mb-1">
+            <HeartPulse className="w-8 h-8" />
           </div>
-          <h1 className="text-2xl font-bold font-display text-white tracking-tight">Create Account</h1>
-          <p className="text-sm text-slate-400">Join Companio AI Voice Agent Portal</p>
+          <h1 className="text-2xl font-bold font-display dark:text-white text-slate-900 tracking-tight">
+            Create Account
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Join Companio AI Healthcare Portal
+          </p>
         </div>
 
         {errorMessage && (
-          <div className="p-3 bg-red-950/50 border border-red-800/60 rounded-xl flex items-center gap-2 text-xs text-red-300">
-            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+          <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center gap-3 text-xs text-red-500 font-semibold">
+            <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorMessage}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-300">Full Name</label>
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              Full Name
+            </label>
             <div className="relative">
-              <User className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. John Doe"
-                className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 text-sm text-slate-100 rounded-xl pl-10 pr-4 py-2.5 outline-none transition"
+                className={`w-full text-xs font-medium pl-10 pr-4 py-3 rounded-2xl border outline-none transition ${
+                  theme === 'dark'
+                    ? 'bg-slate-950 border-slate-800 text-slate-100 focus:border-teal-500'
+                    : 'bg-white border-slate-200 text-slate-900 focus:border-teal-600'
+                }`}
               />
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-300">Email Address</label>
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              Email Address
+            </label>
             <div className="relative">
-              <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@example.com"
-                className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 text-sm text-slate-100 rounded-xl pl-10 pr-4 py-2.5 outline-none transition"
+                className={`w-full text-xs font-medium pl-10 pr-4 py-3 rounded-2xl border outline-none transition ${
+                  theme === 'dark'
+                    ? 'bg-slate-950 border-slate-800 text-slate-100 focus:border-teal-500'
+                    : 'bg-white border-slate-200 text-slate-900 focus:border-teal-600'
+                }`}
               />
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-300">Password</label>
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              Password
+            </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 text-sm text-slate-100 rounded-xl pl-10 pr-4 py-2.5 outline-none transition"
+                className={`w-full text-xs font-medium pl-10 pr-4 py-3 rounded-2xl border outline-none transition ${
+                  theme === 'dark'
+                    ? 'bg-slate-950 border-slate-800 text-slate-100 focus:border-teal-500'
+                    : 'bg-white border-slate-200 text-slate-900 focus:border-teal-600'
+                }`}
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-300">Account Role</label>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Account Role
+              </label>
               <div className="relative">
-                <Shield className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Shield className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 text-sm text-slate-100 rounded-xl pl-9 pr-3 py-2.5 outline-none focus:border-teal-500"
+                  className={`w-full text-xs font-medium pl-9 pr-3 py-3 rounded-2xl border outline-none ${
+                    theme === 'dark'
+                      ? 'bg-slate-950 border-slate-800 text-slate-100 focus:border-teal-500'
+                      : 'bg-white border-slate-200 text-slate-900 focus:border-teal-600'
+                  }`}
                 >
                   <option value="PATIENT">Patient</option>
                   <option value="CLINICIAN">Clinician</option>
@@ -125,29 +191,57 @@ export default function Register() {
 
             {role === 'PATIENT' && (
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-300">Age</label>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Age
+                </label>
                 <input
                   type="number"
                   value={age}
                   onChange={(e) => setAge(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 text-sm text-slate-100 rounded-xl px-4 py-2.5 outline-none focus:border-teal-500"
+                  className={`w-full text-xs font-medium px-4 py-3 rounded-2xl border outline-none ${
+                    theme === 'dark'
+                      ? 'bg-slate-950 border-slate-800 text-slate-100 focus:border-teal-500'
+                      : 'bg-white border-slate-200 text-slate-900 focus:border-teal-600'
+                  }`}
                 />
               </div>
             )}
           </div>
 
+          {role === 'PATIENT' && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Emergency Contact Phone (Optional)
+              </label>
+              <div className="relative">
+                <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="tel"
+                  value={emergencyPhone}
+                  onChange={(e) => setEmergencyPhone(e.target.value)}
+                  placeholder="+1 (555) 234-5678"
+                  className={`w-full text-xs font-medium pl-10 pr-4 py-3 rounded-2xl border outline-none transition ${
+                    theme === 'dark'
+                      ? 'bg-slate-950 border-slate-800 text-slate-100 focus:border-teal-500'
+                      : 'bg-white border-slate-200 text-slate-900 focus:border-teal-600'
+                  }`}
+                />
+              </div>
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={submitting}
-            className="w-full bg-teal-500 hover:bg-teal-400 active:bg-teal-600 text-slate-950 font-semibold text-sm py-2.5 rounded-xl transition shadow-lg shadow-teal-500/20 disabled:opacity-50"
+            className="w-full h-12 bg-gradient-to-r from-teal-500 to-emerald-400 hover:from-teal-400 hover:to-emerald-300 text-slate-950 font-extrabold text-sm rounded-2xl transition shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50"
           >
-            {submitting ? 'Creating Account...' : 'Complete Registration'}
+            {submitting ? 'Registering Account...' : 'Complete Registration'} <ArrowRight className="w-4 h-4" />
           </button>
         </form>
 
-        <div className="text-center text-xs text-slate-400">
+        <div className="text-center text-xs text-slate-500 dark:text-slate-400">
           Already have an account?{' '}
-          <Link to="/login" className="text-teal-400 font-medium hover:underline">
+          <Link to="/login" className="text-teal-600 dark:text-teal-400 font-bold hover:underline">
             Sign in here
           </Link>
         </div>
