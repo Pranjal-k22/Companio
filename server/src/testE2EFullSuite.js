@@ -35,7 +35,7 @@ const __dirname = path.dirname(__filename);
 // Load root .env
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
-const PORT = 5010;
+const PORT = 5013;
 const BASE_URL = `http://localhost:${PORT}`;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/companio';
 
@@ -66,6 +66,7 @@ async function runVerification() {
     { name: 'MONGODB_URI', val: process.env.MONGODB_URI },
     { name: 'JWT_SECRET', val: process.env.JWT_SECRET },
     { name: 'DEEPGRAM_API_KEY', val: process.env.DEEPGRAM_API_KEY },
+    { name: 'GEMINI_API_KEY', val: process.env.GEMINI_API_KEY },
     { name: 'OPENAI_API_KEY', val: process.env.OPENAI_API_KEY },
     { name: 'ANTHROPIC_API_KEY', val: process.env.ANTHROPIC_API_KEY },
     { name: 'ELEVENLABS_API_KEY', val: process.env.ELEVENLABS_API_KEY },
@@ -75,7 +76,7 @@ async function runVerification() {
     { name: 'TWILIO_ACCOUNT_SID', val: process.env.TWILIO_ACCOUNT_SID },
     { name: 'TWILIO_AUTH_TOKEN', val: process.env.TWILIO_AUTH_TOKEN },
     { name: 'TWILIO_FROM_NUMBER', val: process.env.TWILIO_FROM_NUMBER },
-    { name: 'SENDGRID_API_KEY', val: process.env.SENDGRID_API_KEY },
+    { name: 'RESEND_API_KEY', val: process.env.RESEND_API_KEY },
   ];
 
   envKeys.forEach((item) => {

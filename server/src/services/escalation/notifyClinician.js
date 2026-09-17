@@ -1,5 +1,5 @@
 import twilio from 'twilio';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { Patient, User, Flag, EscalationEvent } from '../../models/index.js';
 
 // Category translator mapping raw snake_case categories to clean clinical labels
@@ -131,14 +131,13 @@ Review Immediately: ${detailUrl}`;
   }
 
   // ----------------------------------------------------
-  // 2. Email Escalation (Nodemailer / SendGrid)
+  // 2. Email Escalation (Resend API)
   // ----------------------------------------------------
   const enableEmail = process.env.ENABLE_EMAIL_ESCALATION === 'true';
-  const recipientEmail = clinician?.email || process.env.CLINICIAN_NOTIFICATION_EMAIL || 'sjenkins@healthclinic.org';
-  const sendgridApiKey = process.env.SENDGRID_API_KEY;
-  const smtpHost = process.env.SMTP_HOST;
+  const recipientEmail = process.env.CLINICIAN_NOTIFICATION_EMAIL || clinician?.email || 'sjenkins@healthclinic.org';
+  const resendApiKey = process.env.RESEND_API_KEY;
 
-  if (enableEmail && (sendgridApiKey || smtpHost)) {
+  if (enableEmail && resendApiKey && !resendApiKey.includes('your_')) {
     const emailSubject = `🚨 [URGENT RED ALERT] ${patientName} - ${categoryLabel}`;
     const emailHtml = `
       <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #0f172a; color: #f8fafc; border-radius: 12px;">
@@ -168,40 +167,24 @@ Review Immediately: ${detailUrl}`;
     while (attempt < 2 && !emailSuccess) {
       attempt++;
       try {
-        let transporter;
-        if (sendgridApiKey) {
-          transporter = nodemailer.createTransport({
-            host: 'smtp.sendgrid.net',
-            port: 587,
-            auth: {
-              user: 'apikey',
-              pass: sendgridApiKey,
-            },
-          });
-        } else {
-          transporter = nodemailer.createTransport({
-            host: smtpHost,
-            port: parseInt(process.env.SMTP_PORT, 10) || 587,
-            auth: {
-              user: process.env.SMTP_USER,
-              pass: process.env.SMTP_PASS,
-            },
-          });
-        }
-
-        const info = await transporter.sendMail({
-          from: '"Companio Health System" <alerts@companio.health>',
+        const resend = new Resend(resendApiKey);
+        const { data, error } = await resend.emails.send({
+          from: 'Companio Alerts <onboarding@resend.dev>',
           to: recipientEmail,
           subject: emailSubject,
           html: emailHtml,
         });
 
+        if (error) {
+          throw new Error(error.message || JSON.stringify(error));
+        }
+
         emailSuccess = true;
-        providerMsgId = info.messageId;
-        console.log(`✔ [Email Alert] Sent to ${recipientEmail} (MessageId: ${info.messageId})`);
+        providerMsgId = data?.id;
+        console.log(`✔ [Resend Email Alert] Sent to ${recipientEmail} (Id: ${data?.id})`);
       } catch (err) {
         emailErrorMsg = err.message;
-        console.warn(`⚠️ [Email Alert Attempt ${attempt}/2 Failed]: ${err.message}`);
+        console.warn(`⚠️ [Resend Email Alert Attempt ${attempt}/2 Failed]: ${err.message}`);
         if (attempt < 2) await new Promise((r) => setTimeout(r, 1000));
       }
     }
@@ -214,7 +197,7 @@ Review Immediately: ${detailUrl}`;
         channel: 'EMAIL',
         status: emailSuccess ? 'SENT' : 'FAILED',
         attempts: attempt,
-        providerMessageId: providerMsgId || `EMAIL_MOCK_${Date.now()}`,
+        providerMessageId: providerMsgId || `RESEND_MOCK_${Date.now()}`,
         error: emailSuccess ? undefined : emailErrorMsg,
         sentAt: emailSuccess ? new Date() : undefined,
       });
@@ -229,7 +212,7 @@ Review Immediately: ${detailUrl}`;
       emailStatus = 'FAILED';
     }
   } else {
-    console.log('[Email Alert] Disabled or credentials unconfigured (ENABLE_EMAIL_ESCALATION=false).');
+    console.log('[Resend Email Alert] Disabled or credentials unconfigured (ENABLE_EMAIL_ESCALATION=false or missing RESEND_API_KEY).');
   }
 
   // ----------------------------------------------------

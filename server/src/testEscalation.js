@@ -6,6 +6,7 @@ import { Patient, Conversation, Flag, EscalationEvent } from './models/index.js'
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '../../.env') });
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/companio';
@@ -71,13 +72,16 @@ async function runEscalationVerification() {
     console.log(`✔ Flag Status Updated: ${updatedFlag.status} (Notified Via: "${updatedFlag.notifiedVia}")`);
 
     // ----------------------------------------------------
-    // Test 2: Resiliency Test with Invalid Credentials
+    // Test 2: Resiliency Test with Invalid Credentials (SMS & Resend Email)
     // ----------------------------------------------------
-    console.log('\n--- Test 2: Resiliency Test with Invalid Twilio API Key ---');
+    console.log('\n--- Test 2: Resiliency Test with Invalid API Keys (Twilio & Resend) ---');
     process.env.ENABLE_SMS_ESCALATION = 'true';
     process.env.TWILIO_ACCOUNT_SID = 'AC_invalid_test_sid_12345';
     process.env.TWILIO_AUTH_TOKEN = 'invalid_auth_token_67890';
     process.env.TWILIO_FROM_NUMBER = '+15550000000';
+
+    process.env.ENABLE_EMAIL_ESCALATION = 'true';
+    process.env.RESEND_API_KEY = 're_invalid_test_key_1234567890';
 
     const test2Flag = await Flag.create({
       patientId: robert._id,
@@ -91,17 +95,22 @@ async function runEscalationVerification() {
 
     await new Promise((r) => setTimeout(r, 1200));
 
-    // Confirm flag saved successfully even though Twilio failed
+    // Confirm flag saved successfully even though providers failed
     const checkTest2Flag = await Flag.findById(test2Flag._id);
     if (checkTest2Flag) {
-      console.log(`✔ Flag saved successfully despite SMS failure (${checkTest2Flag._id})`);
+      console.log(`✔ Flag saved successfully despite SMS & Resend API failures (${checkTest2Flag._id})`);
     } else {
       console.error('❌ Flag was not saved during invalid key test!');
     }
 
-    const test2Event = await EscalationEvent.findOne({ flagId: test2Flag._id, channel: 'SMS' });
-    if (test2Event) {
-      console.log(`✔ SMS Failure recorded gracefully in EscalationEvent (${test2Event.status}, Error: "${test2Event.error}")`);
+    const test2SmsEvent = await EscalationEvent.findOne({ flagId: test2Flag._id, channel: 'SMS' });
+    if (test2SmsEvent) {
+      console.log(`✔ SMS Failure recorded gracefully in EscalationEvent (${test2SmsEvent.status}, Error: "${test2SmsEvent.error}")`);
+    }
+
+    const test2EmailEvent = await EscalationEvent.findOne({ flagId: test2Flag._id, channel: 'EMAIL' });
+    if (test2EmailEvent) {
+      console.log(`✔ Resend Email Failure recorded gracefully in EscalationEvent (${test2EmailEvent.status}, Error: "${test2EmailEvent.error}")`);
     }
 
     console.log('\n==================================================');
