@@ -12,6 +12,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",
     "@deepgram/sdk": "^5.10.1",
+    "@google/generative-ai": "^0.24.1",
     "bcryptjs": "^3.0.3",
     "companio-monorepo": "file:..",
     "cors": "^2.8.5",

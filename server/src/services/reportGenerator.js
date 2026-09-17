@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Checkin, Flag, Report, Patient } from '../models/index.js';
 
 /**
@@ -265,7 +265,7 @@ function validateReportJson(parsed) {
 }
 
 /**
- * Main Report Generator Service function
+ * Main Report Generator Service function using Google Gemini 2.0 Flash
  *
  * @param {string} patientId - Target patient ObjectId string
  * @param {Date} periodStart - Period start date
@@ -281,9 +281,14 @@ export async function generateClinicianReport(patientId, periodStart, periodEnd)
   // 1. Compute ground-truth clinical numbers in plain JS
   const computedTrends = await computeClinicalTrends(patientId, periodStart, periodEnd);
 
-  // 2. Try LLM narration if OPENAI_API_KEY is configured
-  if (process.env.OPENAI_API_KEY) {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  // 2. Try LLM narration if GEMINI_API_KEY or OPENAI_API_KEY is configured
+  const apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
+  if (apiKey && !apiKey.includes('your_')) {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      generationConfig: { responseMimeType: 'application/json' },
+    });
     let retryAttempt = 0;
     let lastError = null;
 
@@ -322,14 +327,9 @@ Respond ONLY with valid JSON matching this exact schema:
 ${lastError ? `\n\nERROR IN PREVIOUS ATTEMPT: ${lastError}. Please correct the JSON output format and schema.` : ''}
 `;
 
-        const response = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
-          messages: [{ role: 'user', content: promptSystem }],
-          response_format: { type: 'json_object' },
-          temperature: 0.2,
-        });
-
-        const content = response.choices[0]?.message?.content;
+        const result = await model.generateContent(promptSystem);
+        const response = await result.response;
+        const content = response.text();
         const parsed = JSON.parse(content);
 
         // Validate JSON schema
@@ -371,12 +371,12 @@ ${lastError ? `\n\nERROR IN PREVIOUS ATTEMPT: ${lastError}. Please correct the J
         };
 
         const savedReport = await Report.create(reportData);
-        console.log(`[Report Generator] LLM Generated Report saved successfully (${savedReport._id})`);
+        console.log(`[Report Generator] Gemini Generated Report saved successfully (${savedReport._id})`);
         return savedReport;
       } catch (err) {
         lastError = err.message;
         retryAttempt++;
-        console.warn(`[Report Generator LLM Error] Attempt ${retryAttempt}/2 failed: ${err.message}`);
+        console.warn(`[Report Generator Gemini Error] Attempt ${retryAttempt}/2 failed: ${err.message}`);
       }
     }
     console.warn('[Report Generator] LLM generation failed twice or threw error. Falling back to template generator.');

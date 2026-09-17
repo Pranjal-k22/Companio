@@ -35,7 +35,7 @@ const __dirname = path.dirname(__filename);
 // Load root .env
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
-const PORT = 5009;
+const PORT = 5010;
 const BASE_URL = `http://localhost:${PORT}`;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/companio';
 

@@ -1,5 +1,4 @@
-import OpenAI from 'openai';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Checkin, Flag, Conversation } from '../../../models/index.js';
 
 // Exact Red / Yellow Flag Taxonomy Specification
@@ -68,108 +67,100 @@ AVAILABLE TOOLS:
 `;
 
 /**
- * OpenAI Tool Declarations Schema
+ * Gemini Function Declarations Schema
  */
-const openaiTools = [
+const geminiTools = [
   {
-    type: 'function',
-    function: {
-      name: 'logCheckin',
-      description: 'Record structured check-in summary data into MongoDB',
-      parameters: {
-        type: 'object',
-        properties: {
-          adherence: {
-            type: 'object',
-            properties: {
-              taken: { type: 'boolean' },
-              missedDoses: { type: 'number' },
-              sideEffectsReported: { type: 'array', items: { type: 'string' } },
-              notes: { type: 'string' },
-            },
-          },
-          symptoms: {
-            type: 'array',
-            items: {
-              type: 'object',
+    functionDeclarations: [
+      {
+        name: 'logCheckin',
+        description: 'Record structured check-in summary data into MongoDB',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            adherence: {
+              type: 'OBJECT',
               properties: {
-                name: { type: 'string' },
-                severity: { type: 'string', enum: ['mild', 'moderate', 'severe'] },
-                notes: { type: 'string' },
+                taken: { type: 'BOOLEAN' },
+                missedDoses: { type: 'NUMBER' },
+                sideEffectsReported: { type: 'ARRAY', items: { type: 'STRING' } },
+                notes: { type: 'STRING' },
               },
             },
-          },
-          sleep: {
-            type: 'object',
-            properties: {
-              hours: { type: 'number' },
-              quality: { type: 'string', enum: ['poor', 'fair', 'good'] },
+            symptoms: {
+              type: 'ARRAY',
+              items: {
+                type: 'OBJECT',
+                properties: {
+                  name: { type: 'STRING' },
+                  severity: { type: 'STRING', enum: ['mild', 'moderate', 'severe'] },
+                  notes: { type: 'STRING' },
+                },
+              },
             },
-          },
-          hydration: {
-            type: 'object',
-            properties: {
-              estimatedMl: { type: 'number' },
-              glasses: { type: 'number' },
+            sleep: {
+              type: 'OBJECT',
+              properties: {
+                hours: { type: 'NUMBER' },
+                quality: { type: 'STRING', enum: ['poor', 'fair', 'good'] },
+              },
             },
-          },
-          activity: {
-            type: 'object',
-            properties: {
-              minutesActive: { type: 'number' },
-              type: { type: 'string' },
+            hydration: {
+              type: 'OBJECT',
+              properties: {
+                estimatedMl: { type: 'NUMBER' },
+                glasses: { type: 'NUMBER' },
+              },
             },
+            activity: {
+              type: 'OBJECT',
+              properties: {
+                minutesActive: { type: 'NUMBER' },
+                type: { type: 'STRING' },
+              },
+            },
+            wellbeingScore: { type: 'NUMBER' },
+            patientConcerns: { type: 'ARRAY', items: { type: 'STRING' } },
           },
-          wellbeingScore: { type: 'number', minimum: 1, maximum: 10 },
-          patientConcerns: { type: 'array', items: { type: 'string' } },
         },
       },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'flagConcern',
-      description: 'Log a red or yellow severity clinical concern flag into MongoDB',
-      parameters: {
-        type: 'object',
-        properties: {
-          severity: { type: 'string', enum: ['red', 'yellow'] },
-          category: { type: 'string' },
-          description: { type: 'string' },
-          sourceText: { type: 'string' },
+      {
+        name: 'flagConcern',
+        description: 'Log a red or yellow severity clinical concern flag into MongoDB',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            severity: { type: 'STRING', enum: ['red', 'yellow'] },
+            category: { type: 'STRING' },
+            description: { type: 'STRING' },
+            sourceText: { type: 'STRING' },
+          },
+          required: ['severity', 'category', 'description'],
         },
-        required: ['severity', 'category', 'description'],
       },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'recordConcern',
-      description: 'Record a specific concern the patient wants to raise with their doctor',
-      parameters: {
-        type: 'object',
-        properties: {
-          text: { type: 'string' },
+      {
+        name: 'recordConcern',
+        description: 'Record a specific concern the patient wants to raise with their doctor',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            text: { type: 'STRING' },
+          },
+          required: ['text'],
         },
-        required: ['text'],
       },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'endConversation',
-      description: 'Conclude the voice check-in conversation',
-      parameters: {
-        type: 'object',
-        properties: {
-          summary: { type: 'string' },
+      {
+        name: 'endConversation',
+        description: 'Conclude the voice check-in conversation',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            summary: { type: 'STRING' },
+          },
+          required: ['summary'],
         },
-        required: ['summary'],
       },
-    },
+    ],
   },
 ];
 
@@ -183,7 +174,7 @@ export async function executeToolCall(toolName, args, sessionContext) {
   try {
     if (toolName === 'flagConcern') {
       const { severity, category, description, sourceText } = args;
-      
+
       // Validate category against strict taxonomy
       const validCategory = [...FLAG_TAXONOMY.RED, ...FLAG_TAXONOMY.YELLOW].includes(category)
         ? category
@@ -248,51 +239,59 @@ export async function executeToolCall(toolName, args, sessionContext) {
 }
 
 /**
- * Main Conversational LLM Engine Entrypoint
+ * Main Conversational LLM Engine Entrypoint using Google Gemini 2.0 Flash
  * 
  * @param {string} userTranscript - Recognized user transcript text
  * @param {object} sessionContext - Session state object containing patientId, conversationId, history
  * @returns {Promise<string>} AI assistant response text
  */
 export async function processConversationTurn(userTranscript, sessionContext) {
-  const apiKey = process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
 
-  // Use OpenAI API if OPENAI_API_KEY is present
-  if (process.env.OPENAI_API_KEY) {
+  if (apiKey && !apiKey.includes('your_')) {
     try {
-      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-      
-      const messages = [
-        { role: 'system', content: HEALTH_AGENT_SYSTEM_PROMPT },
-        ...(sessionContext.history || []),
-        { role: 'user', content: userTranscript },
-      ];
-
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages,
-        tools: openaiTools,
-        tool_choice: 'auto',
-        temperature: 0.3,
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-2.0-flash',
+        systemInstruction: HEALTH_AGENT_SYSTEM_PROMPT,
+        tools: geminiTools,
       });
 
-      const choice = response.choices[0].message;
+      const contents = [
+        ...(sessionContext.history || []).map((msg) => ({
+          role: msg.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: msg.content }],
+        })),
+        { role: 'user', parts: [{ text: userTranscript }] },
+      ];
 
-      // Handle Tool Calls
-      if (choice.tool_calls && choice.tool_calls.length > 0) {
-        for (const toolCall of choice.tool_calls) {
-          const fnName = toolCall.function.name;
-          const fnArgs = JSON.parse(toolCall.function.arguments);
+      const result = await model.generateContent({ contents });
+      const response = await result.response;
+
+      // Handle Gemini Function Calls
+      const functionCalls = response.functionCalls();
+      if (functionCalls && functionCalls.length > 0) {
+        for (const call of functionCalls) {
+          const fnName = call.name;
+          const fnArgs = call.args || {};
           await executeToolCall(fnName, fnArgs, sessionContext);
         }
       }
 
-      const responseText = choice.content || 
-        "Thank you for sharing that with me. I've noted down your update for your care team. How else are you feeling today?";
+      let responseText = '';
+      try {
+        responseText = response.text();
+      } catch (e) {
+        // Response contains function call without text
+      }
+
+      if (!responseText) {
+        responseText = "Thank you for sharing that with me. I've noted down your update for your care team. How else are you feeling today?";
+      }
 
       return responseText;
     } catch (err) {
-      console.warn(`[OpenAI LLM Warning] ${err.message}. Falling back to deterministic NLP engine.`);
+      console.warn(`[Gemini LLM Warning] ${err.message}. Falling back to deterministic NLP engine.`);
     }
   }
 
@@ -333,7 +332,7 @@ export async function processClinicalFallbackTurn(userTranscript, sessionContext
   // 2. Detect YELLOW Flags (e.g. mild knee stiffness, missed dose, sleep issues)
   if (text.includes('knee stiffness') || text.includes('joint pain') || text.includes('missed my pill') || text.includes('poor sleep')) {
     const isMedLapse = text.includes('missed my pill');
-    
+
     await executeToolCall(
       'flagConcern',
       {
