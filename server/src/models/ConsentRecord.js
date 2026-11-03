@@ -153,3 +153,4 @@ consentRecordSchema.pre('findOneAndDelete', function (next) {
 const ConsentRecord = mongoose.model('ConsentRecord', consentRecordSchema);
 
 export default ConsentRecord;
+

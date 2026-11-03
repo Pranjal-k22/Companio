@@ -3,7 +3,9 @@ import { useAuth } from '../context/AuthContext';
 import { connectVoiceSocket } from '../services/socket';
 import { useMicCapture } from '../hooks/useMicCapture';
 import { useAudioPlayback } from '../hooks/useAudioPlayback';
-import { Mic, MicOff, HeartPulse, Cpu, ShieldCheck, Play, Square, Terminal, LogOut, AlertTriangle, ShieldAlert, Volume2, Clock } from 'lucide-react';
+import { useBargeIn } from '../hooks/useBargeIn';
+import { useVoiceRecovery } from '../hooks/useVoiceRecovery';
+import { Mic, MicOff, HeartPulse, Cpu, ShieldCheck, Play, Square, Terminal, LogOut, AlertTriangle, ShieldAlert, Volume2, Clock, RefreshCw, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function VoiceSession() {
@@ -55,19 +57,36 @@ export default function VoiceSession() {
     }
   );
 
+  // Dual-Layer Barge-In Hook
+  const { triggerBargeIn, isBargeInActive } = useBargeIn(socket, stopPlayback);
+
+  // Network Recovery Hook
+  const { isRecovering, recoveryAttempts, canResume, attemptResume, clearRecovery } = useVoiceRecovery(
+    socket,
+    (resumedData) => {
+      setSessionInfo(resumedData);
+      setPipelineState('LISTENING');
+      addLog('voice:session:resumed', resumedData);
+    },
+    (err) => {
+      setPipelineState('ERROR');
+      addLog('voice:session:resume_failed', err);
+    }
+  );
+
   // Callback passed to useMicCapture when an audio chunk is captured from mic
   const handleAudioChunk = useCallback(
     (arrayBuffer) => {
       if (socket && socket.connected && (pipelineState === 'LISTENING' || pipelineState === 'SPEAKING')) {
-        // Barge-in: if user starts speaking while agent is speaking, interrupt agent audio
+        // Barge-in: if user starts speaking while agent is speaking, interrupt agent audio immediately
         if (isAgentSpeaking) {
-          stopPlayback();
+          triggerBargeIn();
         }
         socket.emit('audio-chunk', arrayBuffer);
         setAudioChunksSent((prev) => prev + 1);
       }
     },
-    [socket, pipelineState, isAgentSpeaking, stopPlayback]
+    [socket, pipelineState, isAgentSpeaking, triggerBargeIn]
   );
 
   const { isRecording, error: micError, startRecording, stopRecording } = useMicCapture(handleAudioChunk);
@@ -89,6 +108,19 @@ export default function VoiceSession() {
       setSessionInfo(data);
       setPipelineState('LISTENING');
       addLog('session-started', data);
+    });
+
+    voiceSocket.on('voice:session:started', (data) => {
+      setSessionInfo(data);
+      setPipelineState('LISTENING');
+      addLog('voice:session:started', data);
+    });
+
+    voiceSocket.on('voice:state:change', (data) => {
+      if (data.currentState) {
+        setPipelineState(data.currentState);
+      }
+      addLog('voice:state:change', data);
     });
 
     voiceSocket.on('transcript-partial', (data) => {
@@ -145,6 +177,22 @@ export default function VoiceSession() {
       addLog('agent-audio-chunk', { bytes: data.audio?.byteLength || 1024, format: data.format, latencyMs: data.latencyMs });
     });
 
+    voiceSocket.on('voice:barge_in:ack', (data) => {
+      addLog('voice:barge_in:ack', data);
+    });
+
+    voiceSocket.on('voice:audio:ack', (data) => {
+      addLog('voice:audio:ack', data);
+    });
+
+    voiceSocket.on('voice:session:aborted', (data) => {
+      setPipelineState('ERROR');
+      setConsentError(data.message || 'Session was aborted due to security or consent revocation.');
+      stopRecording();
+      stopPlayback();
+      addLog('voice:session:aborted', data);
+    });
+
     voiceSocket.on('tts-error', (err) => {
       setTtsError(err.message || 'Voice synthesis error. Text response displayed below.');
       addLog('tts-error', err);
@@ -154,7 +202,16 @@ export default function VoiceSession() {
       setPipelineState('COMPLETED');
       stopRecording();
       stopPlayback();
+      clearRecovery();
       addLog('session-ended', data);
+    });
+
+    voiceSocket.on('voice:session:ended', (data) => {
+      setPipelineState('COMPLETED');
+      stopRecording();
+      stopPlayback();
+      clearRecovery();
+      addLog('voice:session:ended', data);
     });
 
     voiceSocket.on('voice:error', (err) => {
@@ -167,16 +224,22 @@ export default function VoiceSession() {
 
     return () => {
       voiceSocket.off('session-started');
+      voiceSocket.off('voice:session:started');
+      voiceSocket.off('voice:state:change');
       voiceSocket.off('transcript-partial');
       voiceSocket.off('transcript-final');
       voiceSocket.off('agent-thinking');
       voiceSocket.off('agent-response-text');
       voiceSocket.off('agent-audio-chunk');
+      voiceSocket.off('voice:barge_in:ack');
+      voiceSocket.off('voice:audio:ack');
+      voiceSocket.off('voice:session:aborted');
       voiceSocket.off('tts-error');
       voiceSocket.off('session-ended');
+      voiceSocket.off('voice:session:ended');
       voiceSocket.off('voice:error');
     };
-  }, [token, addLog, stopRecording, stopPlayback, queueChunk]);
+  }, [token, addLog, stopRecording, stopPlayback, queueChunk, clearRecovery]);
 
   const handleStartSession = async () => {
     if (!socket) return;
@@ -321,6 +384,25 @@ export default function VoiceSession() {
               >
                 <Mic className="w-5 h-5" /> Start Speaking (Mic On)
               </button>
+
+              {(isAgentSpeaking || pipelineState === 'SPEAKING' || pipelineState === 'GENERATING' || pipelineState === 'THINKING') && (
+                <button
+                  onClick={() => triggerBargeIn()}
+                  className="w-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-semibold text-xs py-2 rounded-xl border border-amber-500/40 transition flex items-center justify-center gap-2"
+                >
+                  <Zap className="w-4 h-4 text-amber-400" /> Interrupt Companio (Barge-In)
+                </button>
+              )}
+
+              {canResume && pipelineState !== 'LISTENING' && pipelineState !== 'SPEAKING' && (
+                <button
+                  onClick={attemptResume}
+                  disabled={isRecovering}
+                  className="w-full bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 font-semibold text-xs py-2 rounded-xl border border-blue-500/40 transition flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 text-blue-400 ${isRecovering ? 'animate-spin' : ''}`} /> Resume Disrupted Session
+                </button>
+              )}
 
               <button
                 onClick={handleEndSession}

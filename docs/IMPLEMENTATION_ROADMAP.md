@@ -86,16 +86,22 @@ Baseline Audit     API & v1           Tenancy & Auth     Consent &          Voic
 
 ---
 
-## Phase 4: Voice Gateway Hardening & Audio Protocol (Status: ⏳ PENDING AUTHORIZATION)
+## Phase 4: Voice Gateway Hardening & Audio Protocol (Status: ✅ COMPLETED)
 * **Goal**: Harden the real-time Socket.io voice gateway with strict state machine transitions, sequence validation, backpressure, and barge-in audio cancellation.
-* **Key Tasks**:
-  1. Define explicit Voice Session Finite State Machine (FSM): `IDLE` ➔ `CONNECTING` ➔ `LISTENING` ➔ `THINKING` ➔ `SPEAKING` ➔ `FINALIZING` ➔ `COMPLETED` (plus `INTERRUPTED`, `FAILED`, `ABANDONED`).
-  2. Add monotonic sequence numbers and client timestamps to incoming `audio-chunk` frames (`Int16Array`).
-  3. Implement client barge-in protocol: when user speaks while agent is playing TTS, client emits `voice:barge-in`, server cancels ElevenLabs stream, and client purges active Web Audio buffer queue.
-  4. Add turn IDs to all transcript, LLM, and TTS chunks to discard out-of-order or stale audio.
-  5. Add Socket.io backpressure monitoring to gracefully handle slow network drops.
-  6. Add clean text/manual fallback mode if microphone or Web Audio API permissions fail.
-* **Exit Criteria**: Simulated packet loss, barge-in interruption, and network drop recovery tests pass.
+* **Deliverables**:
+  - Voice Session Finite State Machine (`server/src/services/voice/session/voiceSessionStateMachine.js`): 13 explicit states, controlled transitions, terminal locks, and transition audit trail
+  - Monotonic Audio Sequencing & Cumulative ACKs (`server/src/services/voice/protocol/audioChunkManager.js`): Duplicate detection, gap resolution, backpressure thresholding, cumulative ACK generation
+  - Turn Lifecycle & Correlation (`server/src/services/voice/session/turnManager.js`): Correlated `turnId`, sequence counting, user transcript association, confidence scores, AI response mapping, AbortControllers
+  - Dual-Layer Barge-In Interruption (`client/src/hooks/useBargeIn.js`): Synchronous browser Web Audio API cutoff + server-side LLM and ElevenLabs stream abortion
+  - Network Interruption & Session Recovery (`server/src/services/voice/session/sessionRecoveryManager.js`, `client/src/hooks/useVoiceRecovery.js`): 32-byte cryptographically random SHA-256 hashed resume token with 5-minute TTL, single-use replay protection, and tenant/consent re-verification
+  - Provider Resilience: AssemblyAI connection states (60s idle timeout), Gemini multi-model failover with AbortController, and ElevenLabs gapless audio with AbortController
+  - Live Consent Revocation Hook: Real-time `consentRevoked` event aborting active sessions, cancelling turns, closing STT, and disconnecting clients immediately
+  - Resource & Concurrency Limiting (`server/src/services/voice/protocol/voiceResourceLimiter.js`): 1 session per user, 25 sessions per organization, 8KB max frame size, 30m max duration
+  - Zero PHI Telemetry & Benchmarks (`server/src/services/voice/metrics/voiceMetricsCollector.js`): P50/P95/P99 latency tracking, loss rates, zero raw audio disk persistence
+  - UI Senior Polish: `VoiceSession.jsx` & `VoiceCheckIn.jsx` with prominent barge-in tap targets and disrupted session resumption
+  - Automated Verification: `server/src/tests/voice/testVoiceIntegration.js` (40/40 checks passing across 8 dedicated suites)
+  - Specifications: `docs/VOICE_SESSION_STATE_MACHINE.md`, `docs/AUDIO_CHUNK_PROTOCOL.md`, `docs/VOICE_RECOVERY_PROTOCOL.md`, `docs/VOICE_PROVIDER_LIFECYCLE.md`, `docs/VOICE_PERFORMANCE_BENCHMARKS.md`, `docs/PHASE_4_COMPLETION_REPORT.md`
+* **Exit Criteria**: All 40 voice checks pass; simulated packet loss, duplicate discard, barge-in interruption, and 5-min network recovery pass; zero regressions in Phases 1-3. (Met on 2026-11-03)
 
 ---
 

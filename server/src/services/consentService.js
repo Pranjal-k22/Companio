@@ -1,7 +1,12 @@
+import { EventEmitter } from 'events';
+import mongoose from 'mongoose';
 import { ConsentRecord, CONSENT_PURPOSES } from '../models/index.js';
 import { ValidationError, AppError } from '../errors/AppError.js';
 
 export const CURRENT_NOTICE_VERSION = '2026.1';
+
+// Global Event Emitter for Real-Time Consent Status Changes
+export const consentEvents = new EventEmitter();
 
 // Audio retention mode: 'disabled' (default) or 'durable'
 export const AUDIO_RETENTION_MODE = process.env.AUDIO_RETENTION_MODE || 'disabled';
@@ -53,6 +58,16 @@ export async function recordConsent({
     userAgent,
     notes,
   });
+
+  if (decision === 'WITHDRAWN') {
+    consentEvents.emit('consentRevoked', {
+      organizationId: organizationId.toString(),
+      patientId: patientId.toString(),
+      purpose,
+      actorId: actorId?.toString(),
+      timestamp: new Date(),
+    });
+  }
 
   return record;
 }
@@ -170,8 +185,12 @@ export async function getEffectiveConsent(organizationId, patientId) {
  * Used as a zero-latency gatekeeper in the Socket.io /voice namespace.
  */
 export async function verifyVoiceConsent(organizationId, patientId) {
-  if (!patientId) {
-    return { allowed: false, missing: REQUIRED_VOICE_PURPOSES, reason: 'No patient ID provided' };
+  if (!patientId || !mongoose.isValidObjectId(patientId)) {
+    return { allowed: false, missing: REQUIRED_VOICE_PURPOSES, reason: 'No patient ID provided or invalid format' };
+  }
+
+  if (organizationId && !mongoose.isValidObjectId(organizationId)) {
+    return { allowed: false, missing: REQUIRED_VOICE_PURPOSES, reason: 'Invalid organization ID format' };
   }
 
   const effective = await getEffectiveConsent(organizationId, patientId);
@@ -227,6 +246,7 @@ export async function withdrawAllConsent(organizationId, patientId, { actorId, a
 }
 
 export default {
+  consentEvents,
   CURRENT_NOTICE_VERSION,
   AUDIO_RETENTION_MODE,
   REQUIRED_VOICE_PURPOSES,
@@ -237,3 +257,4 @@ export default {
   getConsentHistory,
   withdrawAllConsent,
 };
+

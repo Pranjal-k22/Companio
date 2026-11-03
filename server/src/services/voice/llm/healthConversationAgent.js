@@ -243,14 +243,29 @@ export async function executeToolCall(toolName, args, sessionContext) {
  * 
  * @param {string} userTranscript - Recognized user transcript text
  * @param {object} sessionContext - Session state object containing patientId, conversationId, history
+ * @param {object} [options] - Turn options including abort signal and turn correlation
+ * @param {AbortSignal} [options.signal] - Abort signal for barge-in cancellation
+ * @param {string} [options.turnId] - Correlated turn ID
  * @returns {Promise<string>} AI assistant response text
  */
-export async function processConversationTurn(userTranscript, sessionContext) {
+export async function processConversationTurn(userTranscript, sessionContext, options = {}) {
+  const { signal = null, turnId = null } = options;
+
+  if (signal?.aborted) {
+    console.log(`[Health LLM Agent] Turn ${turnId} aborted prior to model invocation`);
+    return '';
+  }
+
   const apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
 
   if (apiKey && !apiKey.includes('your_')) {
     const candidateModels = [process.env.GEMINI_MODEL || 'gemini-3.8-flash', 'gemini-2.5-flash'];
     for (const modelName of candidateModels) {
+      if (signal?.aborted) {
+        console.log(`[Health LLM Agent] Turn ${turnId} aborted during model loop`);
+        return '';
+      }
+
       try {
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel(
@@ -271,35 +286,49 @@ export async function processConversationTurn(userTranscript, sessionContext) {
         ];
 
         const result = await model.generateContent({ contents });
+
+        if (signal?.aborted) {
+          console.log(`[Health LLM Agent] Turn ${turnId} aborted after generateContent`);
+          return '';
+        }
+
         const response = await result.response;
 
-      // Handle Gemini Function Calls
-      const functionCalls = response.functionCalls();
-      if (functionCalls && functionCalls.length > 0) {
-        for (const call of functionCalls) {
-          const fnName = call.name;
-          const fnArgs = call.args || {};
-          await executeToolCall(fnName, fnArgs, sessionContext);
+        // Handle Gemini Function Calls
+        const functionCalls = response.functionCalls();
+        if (functionCalls && functionCalls.length > 0 && !signal?.aborted) {
+          for (const call of functionCalls) {
+            const fnName = call.name;
+            const fnArgs = call.args || {};
+            await executeToolCall(fnName, fnArgs, sessionContext);
+          }
         }
-      }
 
-      let responseText = '';
-      try {
-        responseText = response.text();
-      } catch (e) {
-        // Response contains function call without text
-      }
+        let responseText = '';
+        try {
+          responseText = response.text();
+        } catch (e) {
+          // Response contains function call without text
+        }
 
-      if (!responseText) {
-        responseText = "Thank you for sharing that with me. I've noted down your update for your care team. How else are you feeling today?";
-      }
+        if (!responseText) {
+          responseText = "Thank you for sharing that with me. I've noted down your update for your care team. How else are you feeling today?";
+        }
 
-      return responseText;
-    } catch (err) {
-      console.warn(`[Gemini LLM Warning] ${err.message}. Falling back to deterministic NLP engine.`);
+        return responseText;
+      } catch (err) {
+        if (signal?.aborted) {
+          console.log(`[Health LLM Agent] Turn ${turnId} aborted during catch`);
+          return '';
+        }
+        console.warn(`[Gemini LLM Warning] ${err.message}. Falling back to deterministic NLP engine.`);
+      }
     }
   }
-}
+
+  if (signal?.aborted) {
+    return '';
+  }
 
   // Deterministic Clinical Fallback Engine if API key is unconfigured or fails
   return processClinicalFallbackTurn(userTranscript, sessionContext);

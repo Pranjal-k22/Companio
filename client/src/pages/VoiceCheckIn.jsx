@@ -4,7 +4,9 @@ import { io } from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
 import { useRawPCM } from '../hooks/useRawPCM';
 import { useAudioPlayback } from '../hooks/useAudioPlayback';
-import { Mic, PhoneOff, HeartPulse, Volume2, Sparkles, AlertCircle } from 'lucide-react';
+import { useBargeIn } from '../hooks/useBargeIn';
+import { useVoiceRecovery } from '../hooks/useVoiceRecovery';
+import { Mic, PhoneOff, HeartPulse, Volume2, Sparkles, AlertCircle, RefreshCw, Zap } from 'lucide-react';
 
 export default function VoiceCheckIn() {
   const { user } = useAuth();
@@ -34,10 +36,30 @@ export default function VoiceCheckIn() {
     }
   );
 
+  // Dual-Layer Barge-In Interruption Hook
+  const { triggerBargeIn } = useBargeIn(socketRef.current, stopPlayback);
+
+  // Session Network Recovery Hook
+  const { isRecovering, canResume, attemptResume, clearRecovery } = useVoiceRecovery(
+    socketRef.current,
+    () => {
+      setVoiceState('listening');
+      setStatusMessage("I'm listening... Speak naturally.");
+    },
+    (err) => {
+      setMicError(err.message || 'Failed to resume session. Please restart.');
+      setVoiceState('idle');
+    }
+  );
+
   // Hardware-Accelerated Raw PCM AudioWorklet Hook (16kHz 16-bit linear PCM)
   const { isRecording, error: recordError, startRecording, stopRecording } = useRawPCM(
     (arrayBuffer) => {
       if (socketRef.current && socketRef.current.connected) {
+        // Natural speech barge-in: If patient starts speaking while Companio speaks, interrupt immediately
+        if (isPlaying) {
+          triggerBargeIn();
+        }
         socketRef.current.emit('audio-chunk', arrayBuffer);
       }
     }
@@ -113,6 +135,21 @@ export default function VoiceCheckIn() {
       setVoiceState('speaking');
       setStatusMessage('Companio is speaking...');
       queueChunk(arrayBuffer);
+    });
+
+    socket.on('voice:session:aborted', (data) => {
+      console.warn('[VoiceCheckIn] Session aborted:', data);
+      stopRecording();
+      stopPlayback();
+      clearRecovery();
+      setVoiceState('idle');
+      setStatusMessage('Check-in session terminated.');
+      setMicError(data.message || 'Check-in was stopped because consent was withdrawn.');
+    });
+
+    socket.on('voice:barge_in:ack', () => {
+      setVoiceState('listening');
+      setStatusMessage("I'm listening... Speak naturally.");
     });
 
     socket.on('flag-created', (flagData) => {
@@ -208,20 +245,46 @@ export default function VoiceCheckIn() {
                 }`}
               />
               <div
+                onClick={voiceState === 'speaking' ? () => triggerBargeIn() : undefined}
+                role={voiceState === 'speaking' ? 'button' : undefined}
+                aria-label={voiceState === 'speaking' ? 'Tap to speak now' : undefined}
                 className={`relative w-52 h-52 rounded-full flex flex-col items-center justify-center shadow-2xl border-4 transition-all duration-300 ${
                   voiceState === 'listening'
                     ? 'bg-gradient-to-tr from-emerald-500 to-teal-400 border-white text-slate-950'
                     : voiceState === 'speaking'
-                    ? 'bg-gradient-to-tr from-teal-400 to-cyan-400 border-white text-slate-950'
+                    ? 'bg-gradient-to-tr from-teal-400 to-cyan-400 border-white text-slate-950 cursor-pointer active:scale-95'
                     : 'bg-slate-800 border-slate-600 text-slate-300'
                 }`}
               >
                 <Mic className="w-20 h-20" />
                 <span className="text-xl font-bold uppercase tracking-wider mt-1">
-                  {voiceState === 'speaking' ? 'Companio' : 'Listening'}
+                  {voiceState === 'speaking' ? 'Tap to Speak' : 'Listening'}
                 </span>
               </div>
             </div>
+          )}
+
+          {/* Barge-In Banner for Senior Ease-of-Use */}
+          {voiceState === 'speaking' && (
+            <button
+              onClick={() => triggerBargeIn()}
+              className="px-6 py-3 bg-amber-500/20 hover:bg-amber-500/30 border-2 border-amber-400/50 rounded-2xl text-amber-300 text-base font-bold flex items-center gap-2 transition transform active:scale-95 shadow-lg"
+            >
+              <Zap className="w-5 h-5 text-amber-400" />
+              <span>Tap here or just speak to interrupt Companio</span>
+            </button>
+          )}
+
+          {/* Session Recovery Button */}
+          {canResume && voiceState === 'idle' && (
+            <button
+              onClick={attemptResume}
+              disabled={isRecovering}
+              className="px-6 py-3 bg-blue-500/20 hover:bg-blue-500/30 border-2 border-blue-400/50 rounded-2xl text-blue-300 text-base font-bold flex items-center gap-2 transition shadow-lg"
+            >
+              <RefreshCw className={`w-5 h-5 text-blue-400 ${isRecovering ? 'animate-spin' : ''}`} />
+              <span>Resume Interrupted Check-in</span>
+            </button>
           )}
 
           {micError && (

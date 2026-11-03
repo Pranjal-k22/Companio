@@ -119,3 +119,4 @@ The centralized logger (`server/src/utils/logger.js`) executes deep recursive pa
 - **SSN Redaction**: `[REDACTED_SSN]`
 - **JWT / Auth Tokens**: `[REDACTED_JWT_TOKEN]`
 - **Transcript Keys**: `transcript`, `userTranscript`, `finalTranscript`, `speechText`, `rawAudio` replaced with `[REDACTED]`.
+
