@@ -117,3 +117,4 @@
 | **STT Older Adult Accents** | Medium | Medium | Low | Phase 5 (Read-back Confirmation Loop) |
 | **Cross-Tenant IDOR** | High | Medium | Very Low | Phase 2 (Organization & Care-Team Scoping) |
 | **Unacknowledged Red Flags** | High | Medium | Low | Phase 6 (SLA Timers & Secondary Routing) |
+

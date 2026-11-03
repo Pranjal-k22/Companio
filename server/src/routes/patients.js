@@ -2,19 +2,28 @@ import express from 'express';
 import { verifyToken } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roles.js';
 import { Patient, Checkin, Flag } from '../models/index.js';
+import { sendSuccess } from '../utils/response.js';
+import { NotFoundError } from '../errors/AppError.js';
+import { validateRequest } from '../middleware/validate.js';
+import { objectIdSchema } from '../validators/common.schemas.js';
+import { z } from 'zod';
 
 const router = express.Router();
 
+const patientParamSchema = z.object({
+  patientId: objectIdSchema,
+});
+
 /**
- * @route   GET /api/patients
+ * @route   GET /api/v1/patients (or /api/patients)
  * @desc    Get list of patients for clinician dashboard with flag counts & last checkin
  * @access  Private (Clinician / Admin)
  */
-router.get('/', verifyToken, requireRole('CLINICIAN', 'ADMIN'), async (req, res) => {
+router.get('/', verifyToken, requireRole('CLINICIAN', 'ADMIN'), async (req, res, next) => {
   try {
     let filter = {};
     if (req.user.role === 'CLINICIAN' && !req.query.all) {
-      filter = { assignedClinicianId: req.user.userId };
+      filter = { assignedClinicianId: req.user.id || req.user.userId };
     }
 
     const patients = await Patient.find(filter).lean();
@@ -62,37 +71,45 @@ router.get('/', verifyToken, requireRole('CLINICIAN', 'ADMIN'), async (req, res)
       if (b.openYellowFlagsCount !== a.openYellowFlagsCount) {
         return b.openYellowFlagsCount - a.openYellowFlagsCount;
       }
-      return a.name.localeCompare(b.name);
+      return (a.name || '').localeCompare(b.name || '');
     });
 
-    return res.status(200).json({
-      success: true,
-      count: enhancedPatients.length,
-      patients: enhancedPatients,
+    return sendSuccess(res, enhancedPatients, {
+      legacyKey: 'patients',
+      pagination: {
+        page: 1,
+        limit: enhancedPatients.length,
+        total: enhancedPatients.length,
+        totalPages: 1,
+      },
     });
   } catch (error) {
-    console.error('[Patients Route Error] GET / failed:', error);
-    return res.status(500).json({ success: false, message: 'Server error fetching patient list.' });
+    next(error);
   }
 });
 
 /**
- * @route   GET /api/patients/:patientId
+ * @route   GET /api/v1/patients/:patientId
  * @desc    Get patient profile by ID
  * @access  Private (Clinician / Admin)
  */
-router.get('/:patientId', verifyToken, requireRole('CLINICIAN', 'ADMIN'), async (req, res) => {
-  try {
-    const { patientId } = req.params;
-    const patient = await Patient.findById(patientId).lean();
-    if (!patient) {
-      return res.status(404).json({ success: false, message: 'Patient record not found.' });
+router.get(
+  '/:patientId',
+  verifyToken,
+  requireRole('CLINICIAN', 'ADMIN'),
+  validateRequest({ params: patientParamSchema }),
+  async (req, res, next) => {
+    try {
+      const { patientId } = req.params;
+      const patient = await Patient.findById(patientId).lean();
+      if (!patient) {
+        throw new NotFoundError('Patient record not found.');
+      }
+      return sendSuccess(res, { patient });
+    } catch (error) {
+      next(error);
     }
-    return res.status(200).json({ success: true, patient });
-  } catch (error) {
-    console.error('[Patients Route Error] GET /:patientId failed:', error);
-    return res.status(500).json({ success: false, message: 'Server error fetching patient details.' });
   }
-});
+);
 
 export default router;

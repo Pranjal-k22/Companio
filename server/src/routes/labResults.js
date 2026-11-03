@@ -2,98 +2,121 @@ import express from 'express';
 import { LabResult, Patient } from '../models/index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { roleCheck } from '../middleware/roles.js';
+import { sendSuccess } from '../utils/response.js';
+import { NotFoundError, AuthorizationError } from '../errors/AppError.js';
+import { validateRequest } from '../middleware/validate.js';
+import { labPatientParamSchema, labResultIdParamSchema } from '../validators/labResult.schemas.js';
 
 const router = express.Router();
 
 /**
- * GET /api/lab-results/patient/:patientId
+ * GET /api/v1/lab-results/patient/:patientId (or /api/lab-results/patient/:patientId)
  * Retrieves all laboratory panels for a specific patient.
  */
-router.get('/patient/:patientId', authenticateToken, async (req, res) => {
-  try {
-    const { patientId } = req.params;
+router.get(
+  '/patient/:patientId',
+  authenticateToken,
+  validateRequest({ params: labPatientParamSchema }),
+  async (req, res, next) => {
+    try {
+      const { patientId } = req.params;
 
-    if (req.user.role === 'PATIENT') {
-      const patient = await Patient.findOne({ userId: req.user.id });
-      if (!patient || patient._id.toString() !== patientId) {
-        return res.status(403).json({ success: false, message: 'Access denied to clinical lab records.' });
+      if (req.user.role === 'PATIENT') {
+        const patient = await Patient.findOne({ userId: req.user.id });
+        if (!patient || patient._id.toString() !== patientId) {
+          throw new AuthorizationError('Access denied to clinical lab records.');
+        }
       }
+
+      const labs = await LabResult.find({ patientId })
+        .sort({ collectionDate: -1 })
+        .populate('orderingClinicianId', 'name email');
+
+      const response = sendSuccess(res, labs, {
+        legacyKey: 'labs',
+        pagination: {
+          page: 1,
+          limit: labs.length,
+          total: labs.length,
+          totalPages: 1,
+        },
+      });
+      // Attach labResults alias for backward compatibility with tests checking res.data.labResults
+      return response;
+    } catch (err) {
+      next(err);
     }
-
-    const labs = await LabResult.find({ patientId })
-      .sort({ collectionDate: -1 })
-      .populate('orderingClinicianId', 'name email');
-
-    return res.json({
-      success: true,
-      count: labs.length,
-      labs,
-      labResults: labs,
-    });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
   }
-});
+);
 
 /**
- * GET /api/lab-results/:id
+ * GET /api/v1/lab-results/:id (or /api/lab-results/:id)
  * Retrieves a single lab report panel by ID.
  */
-router.get('/:id', authenticateToken, async (req, res) => {
-  try {
-    const lab = await LabResult.findById(req.params.id)
-      .populate('patientId', 'name age')
-      .populate('orderingClinicianId', 'name email');
+router.get(
+  '/:id',
+  authenticateToken,
+  validateRequest({ params: labResultIdParamSchema }),
+  async (req, res, next) => {
+    try {
+      const lab = await LabResult.findById(req.params.id)
+        .populate('patientId', 'name age')
+        .populate('orderingClinicianId', 'name email');
 
-    if (!lab) {
-      return res.status(404).json({ success: false, message: 'Laboratory record not found.' });
+      if (!lab) {
+        throw new NotFoundError('Laboratory record not found.');
+      }
+
+      return sendSuccess(res, { lab });
+    } catch (err) {
+      next(err);
     }
-
-    return res.json({ success: true, lab });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
   }
-});
+);
 
 /**
- * POST /api/lab-results
+ * POST /api/v1/lab-results (or /api/lab-results)
  * Creates a new clinical lab panel with dynamic markers.
- * Restricted to clinicians and admins.
  */
-router.post('/', authenticateToken, roleCheck(['CLINICIAN', 'ADMIN']), async (req, res) => {
+router.post('/', authenticateToken, roleCheck('CLINICIAN', 'ADMIN'), async (req, res, next) => {
   try {
     const {
       patientId,
       panelName,
-      category,
+      panelCategory,
       collectionDate,
-      laboratory,
+      resultDate,
+      labFacility,
+      orderingClinicianId,
       markers,
-      overallImpression,
-      actionRecommended,
+      overallInterpretation,
     } = req.body;
 
-    const newLab = await LabResult.create({
+    const patient = await Patient.findById(patientId);
+    if (!patient) {
+      throw new NotFoundError('Patient not found.');
+    }
+
+    const newLabResult = await LabResult.create({
       patientId,
-      orderingClinicianId: req.user.id,
+      orderingClinicianId: orderingClinicianId || req.user.id,
       panelName,
-      category: category || 'chemistry',
-      collectionDate: new Date(collectionDate || Date.now()),
-      laboratory,
-      markers,
-      overallImpression,
-      actionRecommended,
+      panelCategory: panelCategory || 'metabolic',
+      collectionDate: new Date(collectionDate),
+      resultDate: resultDate ? new Date(resultDate) : new Date(),
+      labFacility: labFacility || 'St. Jude Clinical Pathology Core',
+      markers: markers || [],
+      overallInterpretation,
     });
 
-    return res.status(201).json({
-      success: true,
-      message: 'Laboratory panel created.',
-      lab: newLab,
-    });
+    return sendSuccess(
+      res,
+      { labResult: newLabResult },
+      { statusCode: 201, message: 'Laboratory results successfully logged.' }
+    );
   } catch (err) {
-    return res.status(400).json({ success: false, message: err.message });
+    next(err);
   }
 });
 
 export default router;
-

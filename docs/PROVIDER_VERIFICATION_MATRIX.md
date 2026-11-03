@@ -114,3 +114,4 @@
 ```
 > [!IMPORTANT]
 > **No provider is marked "Production Approved"**. While live API keys are verified and functional for development testing, healthcare production deployments strictly require formal Business Associate Agreements (BAAs), zero-data-retention agreements from AI vendors, and enterprise clinical validation.
+

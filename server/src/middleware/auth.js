@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import { AuthenticationError } from '../errors/AppError.js';
 
 /**
  * Middleware to verify JWT token attached in Authorization header
@@ -9,10 +10,7 @@ export const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({
-      success: false,
-      message: 'Access denied. No authentication token provided.',
-    });
+    return next(new AuthenticationError('Access denied. No authentication token provided.'));
   }
 
   const token = authHeader.split(' ')[1];
@@ -24,10 +22,7 @@ export const verifyToken = async (req, res, next) => {
     // Fetch user profile from database to ensure user still exists and role is current
     const user = await User.findById(decoded.id).select('-passwordHash');
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid token. User account no longer exists.',
-      });
+      return next(new AuthenticationError('Invalid token. User account no longer exists.'));
     }
 
     // Attach user information to request
@@ -41,10 +36,7 @@ export const verifyToken = async (req, res, next) => {
     next();
   } catch (error) {
     console.warn(`[Auth Warning] JWT Verification failed: ${error.message}`);
-    return res.status(401).json({
-      success: false,
-      message: 'Authentication failed. Invalid or expired token.',
-    });
+    return next(new AuthenticationError('Authentication failed. Invalid or expired token.'));
   }
 };
 

@@ -1,14 +1,18 @@
 import express from 'express';
 import { Appointment, Patient } from '../models/index.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { sendSuccess } from '../utils/response.js';
+import { NotFoundError, ValidationError } from '../errors/AppError.js';
+import { validateRequest } from '../middleware/validate.js';
+import { appointmentIdParamSchema } from '../validators/appointment.schemas.js';
 
 const router = express.Router();
 
 /**
- * GET /api/appointments
+ * GET /api/v1/appointments (or /api/appointments)
  * Retrieves appointments filtered by user role and optional query parameters.
  */
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', authenticateToken, async (req, res, next) => {
   try {
     const { patientId, status } = req.query;
     let query = {};
@@ -16,7 +20,7 @@ router.get('/', authenticateToken, async (req, res) => {
     if (req.user.role === 'PATIENT') {
       const patient = await Patient.findOne({ userId: req.user.id });
       if (!patient) {
-        return res.status(404).json({ success: false, message: 'Patient profile not found.' });
+        throw new NotFoundError('Patient profile not found.');
       }
       query.patientId = patient._id;
     } else if (patientId) {
@@ -34,21 +38,25 @@ router.get('/', authenticateToken, async (req, res) => {
       .populate('patientId', 'name age contact')
       .populate('clinicianId', 'name email');
 
-    return res.json({
-      success: true,
-      count: appointments.length,
-      appointments,
+    return sendSuccess(res, appointments, {
+      legacyKey: 'appointments',
+      pagination: {
+        page: 1,
+        limit: appointments.length,
+        total: appointments.length,
+        totalPages: 1,
+      },
     });
   } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
+    next(err);
   }
 });
 
 /**
- * POST /api/appointments
+ * POST /api/v1/appointments (or /api/appointments)
  * Books or schedules a new clinical appointment.
  */
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticateToken, async (req, res, next) => {
   try {
     const {
       patientId,
@@ -66,7 +74,7 @@ router.post('/', authenticateToken, async (req, res) => {
     if (req.user.role === 'PATIENT') {
       const patient = await Patient.findOne({ userId: req.user.id });
       if (!patient) {
-        return res.status(404).json({ success: false, message: 'Patient profile not found.' });
+        throw new NotFoundError('Patient profile not found.');
       }
       targetPatientId = patient._id;
     }
@@ -84,51 +92,51 @@ router.post('/', authenticateToken, async (req, res) => {
       reasonForVisit,
     });
 
-    return res.status(201).json({
-      success: true,
-      message: 'Appointment successfully scheduled.',
-      appointment: newAppointment,
-    });
+    return sendSuccess(
+      res,
+      { appointment: newAppointment },
+      { statusCode: 201, message: 'Appointment successfully scheduled.' }
+    );
   } catch (err) {
-    return res.status(400).json({ success: false, message: err.message });
+    next(err);
   }
 });
 
 /**
- * PATCH /api/appointments/:id/status
+ * PATCH /api/v1/appointments/:id/status (or /api/appointments/:id/status)
  * Updates appointment status (e.g., confirmed, completed, cancelled, no_show)
  */
-router.patch('/:id/status', authenticateToken, async (req, res) => {
-  try {
-    const { status, clinicalNotes } = req.body;
-    const validStatuses = ['scheduled', 'confirmed', 'completed', 'cancelled', 'no_show'];
+router.patch(
+  '/:id/status',
+  authenticateToken,
+  validateRequest({ params: appointmentIdParamSchema }),
+  async (req, res, next) => {
+    try {
+      const { status, clinicalNotes } = req.body;
+      const validStatuses = ['scheduled', 'confirmed', 'completed', 'cancelled', 'no_show'];
 
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ success: false, message: `Invalid status: ${status}` });
+      if (!status || !validStatuses.includes(status)) {
+        throw new ValidationError(`Invalid status: ${status}. Must be one of: ${validStatuses.join(', ')}`);
+      }
+
+      const updateFields = { status };
+      if (clinicalNotes !== undefined) updateFields.clinicalNotes = clinicalNotes;
+
+      const updated = await Appointment.findByIdAndUpdate(
+        req.params.id,
+        { $set: updateFields },
+        { new: true, runValidators: true }
+      );
+
+      if (!updated) {
+        throw new NotFoundError('Appointment not found.');
+      }
+
+      return sendSuccess(res, { appointment: updated }, { message: 'Appointment status updated.' });
+    } catch (err) {
+      next(err);
     }
-
-    const updateFields = { status };
-    if (clinicalNotes !== undefined) updateFields.clinicalNotes = clinicalNotes;
-
-    const updated = await Appointment.findByIdAndUpdate(
-      req.params.id,
-      { $set: updateFields },
-      { new: true, runValidators: true }
-    );
-
-    if (!updated) {
-      return res.status(404).json({ success: false, message: 'Appointment not found.' });
-    }
-
-    return res.json({
-      success: true,
-      message: 'Appointment status updated.',
-      appointment: updated,
-    });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
   }
-});
+);
 
 export default router;
-

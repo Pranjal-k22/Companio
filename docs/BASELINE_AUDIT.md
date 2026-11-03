@@ -127,3 +127,4 @@ All 7 test scripts located in `server/src/` were executed against the active loc
 - **Root `package.json`**: Keyword contains stale `"deepgram"` tag from pre-migration STT stack.
 - **Root `.env.example`**: Mentions `GEMINI_API_KEY` for "Gemini 2.0 Flash" (deprecated) and lacks target-state variables (`API_BASE_PATH`, `REDIS_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `AUDIO_RETENTION_MODE`).
 - **Orphan Client Page**: `VoiceSession.jsx` remains in `client/src/pages/` as an unused predecessor to `VoiceCheckIn.jsx`.
+

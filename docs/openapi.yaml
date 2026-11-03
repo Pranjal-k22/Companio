@@ -1,0 +1,480 @@
+openapi: 3.1.0
+info:
+  title: Companio Healthcare Platform API
+  description: >-
+    Production API specification for Companio, an AI voice-first health and wellness
+    monitoring platform designed for adults aged 55+. Supports dual-compatible versioned
+    endpoints (/api/v1 and legacy /api aliases), RFC 9457 problem details, correlation
+    tracking, and strict clinical parameter validation.
+  version: 1.0.0
+  contact:
+    name: Companio Engineering Architecture Team
+    email: engineering@companio.app
+servers:
+  - url: http://localhost:5000/api/v1
+    description: Local Development Server (v1 Namespace)
+  - url: https://api.companio.app/api/v1
+    description: Production Environment
+
+paths:
+  /health:
+    get:
+      summary: System Health & Readiness Check
+      description: Returns service uptime, database connectivity state, and active API version namespace.
+      responses:
+        '200':
+          description: System operational
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /auth/login:
+    post:
+      summary: User Authentication
+      description: Authenticates clinicians, patients, and administrators using email and password. Rate-limited to 50 attempts per 15 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccessResponse'
+        '400':
+          $ref: '#/components/responses/400ValidationError'
+        '401':
+          $ref: '#/components/responses/401AuthenticationError'
+
+  /auth/me:
+    get:
+      summary: Current Authenticated User Identity
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/401AuthenticationError'
+
+  /auth/profile:
+    put:
+      summary: Update User Profile & Accessibility Preferences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profile updated successfully
+        '400':
+          $ref: '#/components/responses/400ValidationError'
+        '401':
+          $ref: '#/components/responses/401AuthenticationError'
+
+  /patients:
+    get:
+      summary: List Assigned Patients
+      description: Retrieves a paginated list of patients. Requires CLINICIAN or ADMIN role.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 25
+            maximum: 100
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [name, createdAt, dateOfBirth, -createdAt, -name]
+            default: -createdAt
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated patient roster
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientListResponse'
+        '401':
+          $ref: '#/components/responses/401AuthenticationError'
+        '403':
+          $ref: '#/components/responses/403ForbiddenError'
+
+  /patients/{id}:
+    get:
+      summary: Retrieve Patient Details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      responses:
+        '200':
+          description: Detailed patient medical record and demographics
+        '400':
+          $ref: '#/components/responses/400ValidationError'
+        '404':
+          $ref: '#/components/responses/404NotFoundError'
+
+  /checkins/{patientId}:
+    get:
+      summary: List Patient Daily Voice Check-ins
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 25
+      responses:
+        '200':
+          description: Historical check-in records
+
+  /flags/patient/{patientId}:
+    get:
+      summary: List Clinical Triage Flags for Patient
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      responses:
+        '200':
+          description: Clinical safety flags sorted by severity and recency
+
+  /flags/{id}/status:
+    patch:
+      summary: Update Clinical Triage Flag Status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [pending, reviewed, escalated, resolved, dismissed]
+                resolutionNotes:
+                  type: string
+      responses:
+        '200':
+          description: Flag status updated
+
+  /reports/{patientId}:
+    get:
+      summary: Retrieve Latest Clinical Retrospective Report
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      responses:
+        '200':
+          description: Synthesized clinical report with deterministic trend analytics
+
+  /reports/{patientId}/generate:
+    post:
+      summary: Trigger On-Demand Report Synthesis
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      responses:
+        '201':
+          description: Newly synthesized report
+
+  /appointments:
+    get:
+      summary: List Clinical Appointments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: query
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      responses:
+        '200':
+          description: Appointments list
+
+  /lab-results/patient/{patientId}:
+    get:
+      summary: Retrieve Patient Diagnostic Lab Panels
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      responses:
+        '200':
+          description: Laboratory diagnostics and biomarker panels
+
+  /conversations:
+    get:
+      summary: Retrieve Conversation Transcripts & Voice Sessions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of conversational interactions and speech transcripts
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    400ValidationError:
+      description: RFC 9457 Validation Failure
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    401AuthenticationError:
+      description: RFC 9457 Authentication Required
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    403ForbiddenError:
+      description: RFC 9457 Role-Based Access Denied
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    404NotFoundError:
+      description: RFC 9457 Resource Not Found
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+  schemas:
+    ProblemDetails:
+      type: object
+      required: [type, title, status, detail, code, requestId]
+      properties:
+        type:
+          type: string
+          format: uri
+          example: 'https://companio.app/problems/validation-error'
+        title:
+          type: string
+          example: 'Validation Error'
+        status:
+          type: integer
+          example: 400
+        detail:
+          type: string
+          example: 'One or more fields failed validation.'
+        instance:
+          type: string
+          example: '/api/v1/patients'
+        code:
+          type: string
+          example: 'VALIDATION_ERROR'
+        requestId:
+          type: string
+          format: uuid
+          example: 'd13da109-3488-4d75-9709-c343fbb87d3b'
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+              code:
+                type: string
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: 'ok'
+        uptime:
+          type: number
+        database:
+          type: string
+          example: 'connected'
+        apiNamespace:
+          type: string
+          example: '/api/v1'
+        requestId:
+          type: string
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+
+    AuthSuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            token:
+              type: string
+            user:
+              type: object
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+            timestamp:
+              type: string
+
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [PATIENT, CLINICIAN, ADMIN, CAREGIVER]
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        voiceSpeed:
+          type: number
+          minimum: 0.5
+          maximum: 2.0
+        highContrastMode:
+          type: boolean
+        emergencyContact:
+          type: object
+          properties:
+            name:
+              type: string
+            phone:
+              type: string
+            relationship:
+              type: string
+
+    PatientListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            type: object
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+            limit:
+              type: integer
+            total:
+              type: integer
+            totalPages:
+              type: integer
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+            timestamp:
+              type: string

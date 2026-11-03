@@ -1,6 +1,13 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User, Patient } from '../models/index.js';
+import { sendSuccess } from '../utils/response.js';
+import {
+  ValidationError,
+  AuthenticationError,
+  ConflictError,
+  NotFoundError,
+} from '../errors/AppError.js';
 
 const generateToken = (user) => {
   const jwtSecret = process.env.JWT_SECRET || 'your_super_secret_jwt_key_here_change_in_production';
@@ -17,28 +24,22 @@ const generateToken = (user) => {
 };
 
 /**
- * @route   POST /api/auth/register
+ * @route   POST /api/v1/auth/register (or /api/auth/register)
  * @desc    Register a new user (Patient, Clinician, or Admin)
  * @access  Public
  */
-export const register = async (req, res) => {
+export const register = async (req, res, next) => {
   try {
     const { name, email, password, role = 'PATIENT', age, contact } = req.body;
 
     if (!name || !email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Name, email, and password are required fields.',
-      });
+      throw new ValidationError('Name, email, and password are required fields.');
     }
 
     // Check if user already exists
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: 'A user account with this email already exists.',
-      });
+      throw new ConflictError('A user account with this email already exists.');
     }
 
     // Hash password
@@ -66,59 +67,47 @@ export const register = async (req, res) => {
 
     const token = generateToken(newUser);
 
-    return res.status(201).json({
-      success: true,
-      message: 'User registered successfully.',
-      token,
-      user: {
-        id: newUser._id,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-        patientId: patientDoc ? patientDoc._id : null,
-      },
-    });
+    const userData = {
+      id: newUser._id,
+      name: newUser.name,
+      email: newUser.email,
+      role: newUser.role,
+      patientId: patientDoc ? patientDoc._id : null,
+    };
+
+    return sendSuccess(
+      res,
+      { token, user: userData },
+      { statusCode: 201, message: 'User registered successfully.' }
+    );
   } catch (error) {
-    console.error('[Auth Error] Register failed:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Server error during registration.',
-    });
+    next(error);
   }
 };
 
 /**
- * @route   POST /api/auth/login
+ * @route   POST /api/v1/auth/login (or /api/auth/login)
  * @desc    Authenticate user & get JWT token
  * @access  Public
  */
-export const login = async (req, res) => {
+export const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide email and password.',
-      });
+      throw new ValidationError('Please provide email and password.');
     }
 
     // Find user by email
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password credentials.',
-      });
+      throw new AuthenticationError('Invalid email or password credentials.');
     }
 
     // Match password
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password credentials.',
-      });
+      throw new AuthenticationError('Invalid email or password credentials.');
     }
 
     // Check if patient profile linked
@@ -130,40 +119,34 @@ export const login = async (req, res) => {
 
     const token = generateToken(user);
 
-    return res.status(200).json({
-      success: true,
-      message: 'Login successful.',
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        patientId,
-      },
-    });
+    const userData = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      patientId,
+    };
+
+    return sendSuccess(
+      res,
+      { token, user: userData },
+      { statusCode: 200, message: 'Login successful.' }
+    );
   } catch (error) {
-    console.error('[Auth Error] Login failed:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Server error during login.',
-    });
+    next(error);
   }
 };
 
 /**
- * @route   GET /api/auth/me
+ * @route   GET /api/v1/auth/me (or /api/auth/me)
  * @desc    Get current authenticated user profile
  * @access  Private (JWT required)
  */
-export const getMe = async (req, res) => {
+export const getMe = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id).select('-passwordHash');
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User profile not found.',
-      });
+      throw new NotFoundError('User profile not found.');
     }
 
     let patientProfile = null;
@@ -171,39 +154,34 @@ export const getMe = async (req, res) => {
       patientProfile = await Patient.findOne({ userId: user._id });
     }
 
-    return res.status(200).json({
-      success: true,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone || patientProfile?.contact?.phone || '',
-        clinicName: user.clinicName || '',
-        preferences: user.preferences || {
-          voiceSpeed: 'normal',
-          notificationsEnabled: true,
-          redFlagSMS: true,
-          dailyDigest: true,
-        },
-        patientProfile,
+    const userData = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone || patientProfile?.contact?.phone || '',
+      clinicName: user.clinicName || '',
+      preferences: user.preferences || {
+        voiceSpeed: 'normal',
+        notificationsEnabled: true,
+        redFlagSMS: true,
+        dailyDigest: true,
       },
-    });
+      patientProfile,
+    };
+
+    return sendSuccess(res, { user: userData });
   } catch (error) {
-    console.error('[Auth Error] getMe failed:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error fetching user profile.',
-    });
+    next(error);
   }
 };
 
 /**
- * @route   PUT /api/auth/profile
+ * @route   PUT /api/v1/auth/profile (or /api/auth/profile)
  * @desc    Update current authenticated user profile & preferences
  * @access  Private (JWT required)
  */
-export const updateProfile = async (req, res) => {
+export const updateProfile = async (req, res, next) => {
   try {
     const {
       name,
@@ -216,7 +194,7 @@ export const updateProfile = async (req, res) => {
 
     const user = await User.findById(req.user.id);
     if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found.' });
+      throw new NotFoundError('User not found.');
     }
 
     if (name) user.name = name.trim();
@@ -252,22 +230,19 @@ export const updateProfile = async (req, res) => {
       );
     }
 
-    return res.status(200).json({
-      success: true,
-      message: 'Profile updated successfully.',
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        clinicName: user.clinicName,
-        preferences: user.preferences,
-        patientProfile,
-      },
-    });
+    const updatedUser = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone,
+      clinicName: user.clinicName,
+      preferences: user.preferences,
+      patientProfile,
+    };
+
+    return sendSuccess(res, { user: updatedUser }, { message: 'Profile updated successfully.' });
   } catch (error) {
-    console.error('[Auth Error] updateProfile failed:', error);
-    return res.status(500).json({ success: false, message: 'Server error updating profile.' });
+    next(error);
   }
 };
