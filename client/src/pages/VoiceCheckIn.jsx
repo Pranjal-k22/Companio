@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
-import { useMicCapture } from '../hooks/useMicCapture';
+import { useRawPCM } from '../hooks/useRawPCM';
 import { useAudioPlayback } from '../hooks/useAudioPlayback';
 import { Mic, PhoneOff, HeartPulse, Volume2, Sparkles, AlertCircle } from 'lucide-react';
 
@@ -34,8 +34,8 @@ export default function VoiceCheckIn() {
     }
   );
 
-  // Mic Capture Hook
-  const { isRecording, error: recordError, startRecording, stopRecording } = useMicCapture(
+  // Hardware-Accelerated Raw PCM AudioWorklet Hook (16kHz 16-bit linear PCM)
+  const { isRecording, error: recordError, startRecording, stopRecording } = useRawPCM(
     (arrayBuffer) => {
       if (socketRef.current && socketRef.current.connected) {
         socketRef.current.emit('audio-chunk', arrayBuffer);

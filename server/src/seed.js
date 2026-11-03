@@ -11,6 +11,8 @@ import {
   Flag,
   Report,
   EscalationEvent,
+  Appointment,
+  LabResult,
 } from './models/index.js';
 
 // Setup environment
@@ -40,6 +42,8 @@ async function seedDatabase() {
       Flag.deleteMany({}),
       Report.deleteMany({}),
       EscalationEvent.deleteMany({}),
+      Appointment.deleteMany({}),
+      LabResult.deleteMany({}),
     ]);
     console.log('✔ Collections cleared.');
 
@@ -382,7 +386,142 @@ async function seedDatabase() {
     });
     console.log(`✔ Report Created (${report._id}).`);
 
-    // 6. Output Summary Table & Count Confirmation
+    // 6. Create Clinical Appointments
+    console.log('\n📅 Creating Clinical Appointments...');
+    const appointmentTomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    appointmentTomorrow.setHours(10, 30, 0, 0);
+
+    const appointmentNextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    appointmentNextWeek.setHours(14, 0, 0, 0);
+
+    const appointmentPast = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+    appointmentPast.setHours(9, 0, 0, 0);
+
+    await Appointment.create([
+      {
+        patientId: robertPatient._id,
+        clinicianId: clinicianUser._id,
+        doctorName: 'Dr. Sarah Jenkins, MD',
+        specialty: 'Cardiologist',
+        clinicLocation: 'St. Jude Heart Center, Suite 402',
+        dateTime: appointmentTomorrow,
+        durationMinutes: 45,
+        type: 'in_person',
+        status: 'confirmed',
+        reasonForVisit: 'Post-cardiac observation checkup and Lisinopril response evaluation.',
+        clinicalNotes: 'Check for orthostatic vitals; review telemetry from home voice check-in red flags.',
+      },
+      {
+        patientId: robertPatient._id,
+        clinicianId: clinicianUser._id,
+        doctorName: 'Dr. Michael Chang, MD',
+        specialty: 'Endocrinologist',
+        clinicLocation: 'Telehealth Video Consultation',
+        dateTime: appointmentNextWeek,
+        durationMinutes: 30,
+        type: 'video_call',
+        status: 'scheduled',
+        reasonForVisit: 'Metabolic panel follow-up and lipid panel adjustment.',
+      },
+      {
+        patientId: robertPatient._id,
+        clinicianId: clinicianUser._id,
+        doctorName: 'Dr. Elena Rostova, MD',
+        specialty: 'Neurologist',
+        clinicLocation: 'Bay Shore Health Pavilion',
+        dateTime: appointmentPast,
+        durationMinutes: 30,
+        type: 'in_person',
+        status: 'completed',
+        reasonForVisit: 'Baseline cognitive and peripheral nerve sensory screening.',
+        clinicalNotes: 'Mild peripheral sensory reduction in distal lower extremities consistent with age.',
+      },
+      {
+        patientId: eleanorPatient._id,
+        clinicianId: clinicianUser._id,
+        doctorName: 'Dr. Sarah Jenkins, MD',
+        specialty: 'Internal Medicine',
+        clinicLocation: 'Memorial Health Clinic, Bay Shore',
+        dateTime: appointmentTomorrow,
+        durationMinutes: 30,
+        type: 'in_person',
+        status: 'confirmed',
+        reasonForVisit: 'Type 2 Diabetes routine review and Metformin adherence follow-up.',
+      },
+      {
+        patientId: arthurPatient._id,
+        clinicianId: clinicianUser._id,
+        doctorName: 'Dr. Marcus Vance, PT',
+        specialty: 'Physical Therapy / Geriatrics',
+        clinicLocation: 'Community Wellness Center, Suite 101',
+        dateTime: appointmentNextWeek,
+        durationMinutes: 45,
+        type: 'in_person',
+        status: 'scheduled',
+        reasonForVisit: 'Gait stability evaluation and home mobility routine reinforcement.',
+      },
+    ]);
+    console.log('✔ Clinical Appointments seeded.');
+
+    // 7. Create Diagnostic Pathology & Lab Results
+    console.log('\n🧪 Creating Diagnostic Pathology & Lab Reports...');
+    await LabResult.create([
+      {
+        patientId: robertPatient._id,
+        orderingClinicianId: clinicianUser._id,
+        panelName: 'Comprehensive Metabolic Panel (CMP)',
+        category: 'chemistry',
+        collectionDate: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000),
+        laboratory: 'Quest Diagnostics / St. Jude Memorial Health Pathology Lab',
+        status: 'final',
+        overallImpression: 'Slightly elevated fasting blood glucose with borderline renal clearance (eGFR 58). Electrolytes unremarkable.',
+        actionRecommended: 'Maintain target hydration (2000+ mL) and monitor blood pressure.',
+        markers: [
+          { name: 'Fasting Glucose', value: 106, unit: 'mg/dL', referenceRange: '70 - 99', isOutOfRange: true, flagSeverity: 'abnormal', interpretation: 'Pre-diabetic fasting baseline' },
+          { name: 'Blood Urea Nitrogen (BUN)', value: 21, unit: 'mg/dL', referenceRange: '7 - 20', isOutOfRange: true, flagSeverity: 'abnormal', interpretation: 'Borderline elevated' },
+          { name: 'Serum Creatinine', value: 1.25, unit: 'mg/dL', referenceRange: '0.70 - 1.30', isOutOfRange: false, flagSeverity: 'normal' },
+          { name: 'eGFR (CKD-EPI)', value: 58, unit: 'mL/min/1.73m²', referenceRange: '> 60', isOutOfRange: true, flagSeverity: 'abnormal', interpretation: 'Mild decrease in glomerular filtration' },
+          { name: 'Serum Sodium', value: 139, unit: 'mEq/L', referenceRange: '135 - 145', isOutOfRange: false, flagSeverity: 'normal' },
+          { name: 'Serum Potassium', value: 4.6, unit: 'mEq/L', referenceRange: '3.5 - 5.0', isOutOfRange: false, flagSeverity: 'normal' },
+          { name: 'Serum Chloride', value: 102, unit: 'mEq/L', referenceRange: '96 - 106', isOutOfRange: false, flagSeverity: 'normal' },
+        ],
+      },
+      {
+        patientId: robertPatient._id,
+        orderingClinicianId: clinicianUser._id,
+        panelName: 'Lipid Profile with Reflex Direct LDL',
+        category: 'cardiac',
+        collectionDate: new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000),
+        laboratory: 'Quest Diagnostics / St. Jude Memorial Health Pathology Lab',
+        status: 'final',
+        overallImpression: 'Elevated total cholesterol and calculated LDL above target (< 70 mg/dL for cardiac observation cohort).',
+        actionRecommended: 'Verify compliance with Atorvastatin 20mg at bedtime.',
+        markers: [
+          { name: 'Total Cholesterol', value: 214, unit: 'mg/dL', referenceRange: '< 200', isOutOfRange: true, flagSeverity: 'abnormal', interpretation: 'Elevated' },
+          { name: 'Triglycerides', value: 172, unit: 'mg/dL', referenceRange: '< 150', isOutOfRange: true, flagSeverity: 'abnormal', interpretation: 'Borderline high' },
+          { name: 'HDL Cholesterol', value: 42, unit: 'mg/dL', referenceRange: '> 40', isOutOfRange: false, flagSeverity: 'normal' },
+          { name: 'LDL Calculated', value: 138, unit: 'mg/dL', referenceRange: '< 100', isOutOfRange: true, flagSeverity: 'abnormal', interpretation: 'Above ideal cardiac cohort threshold' },
+        ],
+      },
+      {
+        patientId: eleanorPatient._id,
+        orderingClinicianId: clinicianUser._id,
+        panelName: 'Hemoglobin A1c Glycemic Panel',
+        category: 'endocrinology',
+        collectionDate: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000),
+        laboratory: 'Quest Diagnostics / Memorial Health Pathology Lab',
+        status: 'final',
+        overallImpression: 'Elevated A1c at 7.4% reflecting suboptimal 90-day glycemic control.',
+        actionRecommended: 'Address weekend Metformin missed doses identified in Companio voice logs.',
+        markers: [
+          { name: 'Hemoglobin A1c', value: 7.4, unit: '%', referenceRange: '< 5.7', isOutOfRange: true, flagSeverity: 'abnormal', interpretation: 'Type 2 Diabetes above target threshold' },
+          { name: 'Estimated Average Glucose (eAG)', value: 166, unit: 'mg/dL', referenceRange: '< 117', isOutOfRange: true, flagSeverity: 'abnormal', interpretation: 'Mean blood glucose elevation' },
+        ],
+      },
+    ]);
+    console.log('✔ Diagnostic Pathology & Lab Results seeded.');
+
+    // 8. Output Summary Table & Count Confirmation
     const counts = {
       Users: await User.countDocuments(),
       Patients: await Patient.countDocuments(),
@@ -391,6 +530,8 @@ async function seedDatabase() {
       Flags: await Flag.countDocuments(),
       Reports: await Report.countDocuments(),
       EscalationEvents: await EscalationEvent.countDocuments(),
+      Appointments: await Appointment.countDocuments(),
+      LabResults: await LabResult.countDocuments(),
     };
 
     console.log('\n==================================================');

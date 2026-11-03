@@ -4,6 +4,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AppLayout from './components/layout/AppLayout';
+import ErrorBoundary from './components/common/ErrorBoundary';
+import NetworkStatusToast from './components/common/NetworkStatusToast';
 
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -49,10 +51,12 @@ function RootRedirect() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ThemeProvider>
-        <BrowserRouter>
-          <Routes>
+    <ErrorBoundary>
+      <AuthProvider>
+        <ThemeProvider>
+          <BrowserRouter>
+            <NetworkStatusToast />
+            <Routes>
             {/* Public Auth Routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
@@ -190,5 +194,6 @@ export default function App() {
         </BrowserRouter>
       </ThemeProvider>
     </AuthProvider>
+  </ErrorBoundary>
   );
 }

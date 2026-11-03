@@ -10,10 +10,13 @@ import reportsRouter from './routes/reports.js';
 import patientsRouter from './routes/patients.js';
 import checkinsRouter from './routes/checkins.js';
 import flagsRouter from './routes/flags.js';
+import appointmentsRouter from './routes/appointments.js';
+import labResultsRouter from './routes/labResults.js';
 import { verifyToken } from './middleware/auth.js';
 import { requireRole } from './middleware/roles.js';
 import { socketAuthMiddleware } from './sockets/socketAuth.js';
 import { initVoiceSocket } from './sockets/voiceSession.js';
+import { initWeeklyReportCron } from './jobs/weeklyReportWorker.js';
 
 // Load environment variables
 dotenv.config();
@@ -40,6 +43,8 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/patients', patientsRouter);
 app.use('/api/checkins', checkinsRouter);
 app.use('/api/flags', flagsRouter);
+app.use('/api/appointments', appointmentsRouter);
+app.use('/api/lab-results', labResultsRouter);
 
 // Test Clinician-Only Protected Route (Verification for Phase 3)
 app.get('/api/test/clinician-only', verifyToken, requireRole('CLINICIAN', 'ADMIN'), (req, res) => {
@@ -73,6 +78,9 @@ io.of('/voice').use(socketAuthMiddleware);
 
 // Initialize Socket Voice Namespace Handlers
 initVoiceSocket(io);
+
+// Initialize Automated Weekly Report Cron Worker (Mondays 2:00 AM)
+initWeeklyReportCron();
 
 // Start HTTP Server
 server.listen(PORT, () => {

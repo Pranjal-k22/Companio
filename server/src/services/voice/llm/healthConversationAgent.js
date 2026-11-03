@@ -253,11 +253,14 @@ export async function processConversationTurn(userTranscript, sessionContext) {
     for (const modelName of candidateModels) {
       try {
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          systemInstruction: HEALTH_AGENT_SYSTEM_PROMPT,
-          tools: geminiTools,
-        });
+        const model = genAI.getGenerativeModel(
+          {
+            model: modelName,
+            systemInstruction: HEALTH_AGENT_SYSTEM_PROMPT,
+            tools: geminiTools,
+          },
+          { timeout: 12000 }
+        );
 
         const contents = [
           ...(sessionContext.history || []).map((msg) => ({

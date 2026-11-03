@@ -36,6 +36,7 @@ import {
   CheckSquare,
   Square,
 } from 'lucide-react';
+import { VitalsChartSkeleton, StatCardSkeleton, Skeleton } from '../components/common/Skeleton';
 
 export default function PatientDetail() {
   const { patientId } = useParams();
@@ -156,9 +157,29 @@ export default function PatientDetail() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center space-x-3">
-        <div className="w-10 h-10 border-3 border-teal-400 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-sm font-medium text-slate-400">Loading Clinical Report & Time-Series Data...</p>
+      <div className="space-y-6 max-w-7xl mx-auto p-4 sm:p-6 animate-pulse">
+        <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-4">
+            <Skeleton className="w-10 h-10" variant="rounded" />
+            <div className="space-y-2">
+              <Skeleton className="w-48 h-6" />
+              <Skeleton className="w-32 h-4" />
+            </div>
+          </div>
+          <Skeleton className="w-36 h-10" variant="rounded" />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <VitalsChartSkeleton />
+          <VitalsChartSkeleton />
+        </div>
       </div>
     );
   }

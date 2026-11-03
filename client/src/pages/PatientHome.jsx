@@ -20,6 +20,7 @@ import {
   Calendar,
   Sparkles,
 } from 'lucide-react';
+import { Skeleton } from '../components/common/Skeleton';
 
 export default function PatientHome() {
   const { user } = useAuth();
@@ -185,11 +186,9 @@ export default function PatientHome() {
           </div>
 
           {loading ? (
-            <div className={`p-8 rounded-3xl border text-center text-slate-400 text-sm ${
-              theme === 'dark' ? 'bg-slate-900/60 border-slate-800' : 'bg-white border-slate-200'
-            }`}>
-              <div className="w-8 h-8 border-3 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-              Loading your daily check-in timeline...
+            <div className="space-y-3">
+              <Skeleton className="h-20 rounded-3xl" />
+              <Skeleton className="h-20 rounded-3xl" />
             </div>
           ) : recentSummaries.length === 0 ? (
             <div className={`p-8 rounded-3xl border text-center space-y-3 ${

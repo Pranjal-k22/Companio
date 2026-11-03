@@ -18,6 +18,7 @@ import {
   Activity,
   Headphones,
 } from 'lucide-react';
+import { PatientCardSkeleton } from '../components/common/Skeleton';
 
 export default function ClinicianDashboard() {
   const { user } = useAuth();
@@ -180,11 +181,17 @@ export default function ClinicianDashboard() {
         </div>
       </div>
 
-      {/* Loading State */}
+      {/* Loading Skeletons */}
       {loading && (
-        <div className="py-16 text-center space-y-3">
-          <div className="w-10 h-10 border-3 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs font-bold text-slate-400">Fetching clinician patient roster & AI risk flags...</p>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Loading Clinical Triage Roster...</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <PatientCardSkeleton />
+            <PatientCardSkeleton />
+            <PatientCardSkeleton />
+          </div>
         </div>
       )}
 

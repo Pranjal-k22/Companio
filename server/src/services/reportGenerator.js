@@ -291,10 +291,13 @@ export async function generateClinicianReport(patientId, periodStart, periodEnd)
 
     while (retryAttempt < candidateModels.length) {
       const activeModelName = candidateModels[retryAttempt];
-      const model = genAI.getGenerativeModel({
-        model: activeModelName,
-        generationConfig: { responseMimeType: 'application/json' },
-      });
+      const model = genAI.getGenerativeModel(
+        {
+          model: activeModelName,
+          generationConfig: { responseMimeType: 'application/json' },
+        },
+        { timeout: 12000 }
+      );
       try {
         const promptSystem = `
 You are a clinical documentation assistant generating a structured report for clinician review.

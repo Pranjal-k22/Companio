@@ -5,6 +5,8 @@ import Checkin from './Checkin.js';
 import Flag from './Flag.js';
 import Report from './Report.js';
 import EscalationEvent from './EscalationEvent.js';
+import Appointment from './Appointment.js';
+import LabResult from './LabResult.js';
 
 export {
   User,
@@ -14,4 +16,6 @@ export {
   Flag,
   Report,
   EscalationEvent,
+  Appointment,
+  LabResult,
 };
