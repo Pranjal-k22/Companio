@@ -1,5 +1,5 @@
 import { Conversation, Patient, Checkin } from '../models/index.js';
-import { createDeepgramSTTStream } from '../services/voice/stt/deepgramSTT.js';
+import { createAssemblyAISTTStream } from '../services/voice/stt/assemblyAISTT.js';
 import { processConversationTurn } from '../services/voice/llm/healthConversationAgent.js';
 import { runSafetyNetCheck } from '../services/safety/keywordSafetyNet.js';
 import { streamTTSResponse } from '../services/voice/tts/elevenLabsTTS.js';
@@ -71,8 +71,8 @@ export const initVoiceSocket = (io) => {
           sttStream: null,
         };
 
-        // Create Deepgram live STT stream controller
-        sessionState.sttStream = createDeepgramSTTStream(socket, async (finalTranscript, confidence, isUncertain) => {
+        // Create AssemblyAI live STT stream controller
+        sessionState.sttStream = createAssemblyAISTTStream(socket, async (finalTranscript, confidence, isUncertain) => {
           try {
             // Run safety net check and LLM turn processing in parallel
             const [, responseText] = await Promise.all([
@@ -112,7 +112,7 @@ export const initVoiceSocket = (io) => {
       session.audioChunksReceived++;
 
       try {
-        // Forward binary audio chunk to Deepgram Live STT stream
+        // Forward binary audio chunk to AssemblyAI Live STT stream
         if (session.sttStream) {
           session.sttStream.sendAudioChunk(chunk);
         }
@@ -176,5 +176,5 @@ export const initVoiceSocket = (io) => {
     });
   });
 
-  console.log('[Socket.io] Voice session manager registered with Deepgram STT stream (/voice)');
+  console.log('[Socket.io] Voice session manager registered with AssemblyAI STT stream (/voice)');
 };

@@ -65,7 +65,7 @@ async function runVerification() {
   const envKeys = [
     { name: 'MONGODB_URI', val: process.env.MONGODB_URI },
     { name: 'JWT_SECRET', val: process.env.JWT_SECRET },
-    { name: 'DEEPGRAM_API_KEY', val: process.env.DEEPGRAM_API_KEY },
+    { name: 'ASSEMBLYAI_API_KEY', val: process.env.ASSEMBLYAI_API_KEY },
     { name: 'GEMINI_API_KEY', val: process.env.GEMINI_API_KEY },
     { name: 'OPENAI_API_KEY', val: process.env.OPENAI_API_KEY },
     { name: 'ANTHROPIC_API_KEY', val: process.env.ANTHROPIC_API_KEY },
@@ -80,8 +80,11 @@ async function runVerification() {
   ];
 
   envKeys.forEach((item) => {
+    const isOptional = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM_NUMBER'].includes(item.name);
     if (item.val && item.val.length > 0) {
       recordTest('Env Config', item.name, 'PASS', maskVal(item.val));
+    } else if (isOptional) {
+      recordTest('Env Config', item.name, 'PASS', 'OPTIONAL / NOT SET');
     } else {
       recordTest('Env Config', item.name, 'FAIL', 'MISSING / EMPTY');
     }

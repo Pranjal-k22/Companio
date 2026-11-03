@@ -60,8 +60,8 @@ async function runFullSystemVerification() {
   const requiredEnvVars = [
     { name: 'MONGODB_URI', val: process.env.MONGODB_URI },
     { name: 'JWT_SECRET', val: process.env.JWT_SECRET },
-    { name: 'DEEPGRAM_API_KEY', val: process.env.DEEPGRAM_API_KEY },
-    { name: 'OPENAI_API_KEY', val: process.env.OPENAI_API_KEY },
+    { name: 'ASSEMBLYAI_API_KEY', val: process.env.ASSEMBLYAI_API_KEY },
+    { name: 'GEMINI_API_KEY', val: process.env.GEMINI_API_KEY },
     { name: 'ELEVENLABS_API_KEY', val: process.env.ELEVENLABS_API_KEY },
     { name: 'ELEVENLABS_VOICE_ID', val: process.env.ELEVENLABS_VOICE_ID },
   ];
