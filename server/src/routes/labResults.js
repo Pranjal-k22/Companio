@@ -28,6 +28,7 @@ router.get('/patient/:patientId', authenticateToken, async (req, res) => {
       success: true,
       count: labs.length,
       labs,
+      labResults: labs,
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });

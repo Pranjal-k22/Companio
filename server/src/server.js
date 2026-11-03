@@ -12,6 +12,7 @@ import checkinsRouter from './routes/checkins.js';
 import flagsRouter from './routes/flags.js';
 import appointmentsRouter from './routes/appointments.js';
 import labResultsRouter from './routes/labResults.js';
+import conversationsRouter from './routes/conversations.js';
 import { verifyToken } from './middleware/auth.js';
 import { requireRole } from './middleware/roles.js';
 import { socketAuthMiddleware } from './sockets/socketAuth.js';
@@ -45,6 +46,7 @@ app.use('/api/checkins', checkinsRouter);
 app.use('/api/flags', flagsRouter);
 app.use('/api/appointments', appointmentsRouter);
 app.use('/api/lab-results', labResultsRouter);
+app.use('/api/conversations', conversationsRouter);
 
 // Test Clinician-Only Protected Route (Verification for Phase 3)
 app.get('/api/test/clinician-only', verifyToken, requireRole('CLINICIAN', 'ADMIN'), (req, res) => {

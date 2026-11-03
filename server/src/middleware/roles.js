@@ -23,4 +23,5 @@ export const requireRole = (...allowedRoles) => {
   };
 };
 
+export const roleCheck = requireRole;
 export default requireRole;

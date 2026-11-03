@@ -135,11 +135,28 @@ export const initVoiceSocket = (io) => {
           session.sttStream.close();
         }
 
+        // Calculate session duration and user speech snippet
+        const durationSeconds = Math.max(1, Math.round((Date.now() - session.startedAt.getTime()) / 1000));
+        const userUtterances = session.history
+          .filter((h) => h.role === 'user')
+          .map((h) => h.content)
+          .join(' ');
+        const transcriptSnippet = userUtterances
+          ? (userUtterances.length > 250 ? `${userUtterances.slice(0, 247)}...` : userUtterances)
+          : 'Check-in dialogue completed.';
+
         // Update Conversation record in MongoDB
         await Conversation.findByIdAndUpdate(session.conversationId, {
           status: 'completed',
           endedAt: new Date(),
-          summary: `Voice check-in completed. ${session.history.length / 2} dialogue turns recorded.`,
+          durationSeconds,
+          transcriptSnippet,
+          turns: session.history.map((h) => ({
+            role: h.role,
+            content: h.content,
+            timestamp: new Date(),
+          })),
+          summary: `Voice check-in completed. ${Math.round(session.history.length / 2)} dialogue turns recorded.`,
         });
 
         // Clean up in-memory session state

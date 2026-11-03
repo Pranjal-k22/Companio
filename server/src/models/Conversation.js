@@ -40,6 +40,44 @@ const conversationSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    transcriptSnippet: {
+      type: String,
+      trim: true,
+    },
+    durationSeconds: {
+      type: Number,
+      default: 0,
+    },
+    aiToneSummary: {
+      type: String,
+      trim: true,
+    },
+    sttAccuracy: {
+      type: String,
+      default: '98%',
+    },
+    riskFlag: {
+      type: String,
+      enum: ['Red Flag', 'Yellow Flag', 'Stable', 'red', 'yellow', 'none'],
+      default: 'Stable',
+    },
+    turns: [
+      {
+        role: {
+          type: String,
+          enum: ['user', 'assistant', 'system'],
+          required: true,
+        },
+        content: {
+          type: String,
+          required: true,
+        },
+        timestamp: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
   {
     timestamps: true,

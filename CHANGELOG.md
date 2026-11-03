@@ -6,6 +6,18 @@ All notable changes and architectural phases for the **Companio** healthcare pla
 
 ## 🚀 Recent Architectural Upgrades (Today)
 
+### `feat(logs-profile)`: data-bind voice audit logs and patient/clinician profile settings
+- **Voice Check-in Audit Logs & Transcripts**:
+  - Enhanced `Conversation` schema with `turns`, `transcriptSnippet`, `durationSeconds`, `aiToneSummary`, `sttAccuracy`, and `riskFlag`.
+  - Built Express REST router `server/src/routes/conversations.js` (`GET /api/conversations`, `GET /api/conversations/:id`) with role-based filtering, text search regex, and linked flag risk categorization.
+  - Upgraded `client/src/pages/ClinicianVoiceLogs.jsx` with live data fetching, AssemblyAI STT attribution, real-time query filtering, triage risk badge filtering, and expandable dialogue turn drawer.
+  - Updated Socket.io `voiceSession.js` `end-session` handler to automatically persist speech snippets, duration, and dialogue turns to MongoDB upon check-in completion.
+- **User Profile & Settings API**:
+  - Added `PUT /api/auth/profile` in `server/src/controllers/authController.js` and `server/src/routes/authRoutes.js`.
+  - Data-bound `client/src/pages/PatientSettings.jsx` (contact phone, designated next-of-kin emergency contact, senior speech speed preference, accessibility font scaling).
+  - Data-bound `client/src/pages/ClinicianSettings.jsx` (hospital unit affiliation, on-call contact phone, instant red flag SMS alerts, daily morning digest).
+  - Standardized middleware aliases (`authenticateToken`, `roleCheck`) and expanded automated test suite to 41/41 passing assertions.
+
 ### `939d39d` — feat(core): implement Stage 1-4 architecture upgrades (UI realism, cron worker, PCM audio, schemas)
 - **Stage 1 (UI Realism & Resilience)**:
   - Replaced generic spinners with bespoke medical skeleton loaders (`PatientCardSkeleton`, `VitalsChartSkeleton`, `TableSkeleton`, `StatCardSkeleton`).

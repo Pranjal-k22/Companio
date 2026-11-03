@@ -56,6 +56,14 @@ async function seedDatabase() {
       email: 'sjenkins@healthclinic.org',
       passwordHash: defaultPasswordHash,
       role: 'CLINICIAN',
+      phone: '+1 (555) 392-8172',
+      clinicName: 'St. Jude Medical Center - Cardiology Unit',
+      preferences: {
+        voiceSpeed: 'normal',
+        notificationsEnabled: true,
+        redFlagSMS: true,
+        dailyDigest: true,
+      },
     });
     console.log(`✔ Created Clinician: ${clinicianUser.name} (${clinicianUser._id})`);
 
@@ -68,6 +76,13 @@ async function seedDatabase() {
       email: 'robert.miller@example.com',
       passwordHash: defaultPasswordHash,
       role: 'PATIENT',
+      phone: '+1-555-019-2834',
+      preferences: {
+        voiceSpeed: 'normal',
+        notificationsEnabled: true,
+        redFlagSMS: true,
+        dailyDigest: false,
+      },
     });
     const robertPatient = await Patient.create({
       userId: robertUser._id,
@@ -90,6 +105,13 @@ async function seedDatabase() {
       email: 'eleanor.vance@example.com',
       passwordHash: defaultPasswordHash,
       role: 'PATIENT',
+      phone: '+1-555-014-9982',
+      preferences: {
+        voiceSpeed: 'slow',
+        notificationsEnabled: true,
+        redFlagSMS: true,
+        dailyDigest: false,
+      },
     });
     const eleanorPatient = await Patient.create({
       userId: eleanorUser._id,
@@ -111,6 +133,13 @@ async function seedDatabase() {
       email: 'arthur.p@example.com',
       passwordHash: defaultPasswordHash,
       role: 'PATIENT',
+      phone: '+1-555-018-4421',
+      preferences: {
+        voiceSpeed: 'slow',
+        notificationsEnabled: true,
+        redFlagSMS: true,
+        dailyDigest: false,
+      },
     });
     const arthurPatient = await Patient.create({
       userId: arthurUser._id,
@@ -150,6 +179,22 @@ async function seedDatabase() {
     for (let day = 10; day >= 1; day--) {
       const startTime = daysAgo(day, 9);
       const endTime = new Date(startTime.getTime() + 6 * 60 * 1000); // 6 min voice session
+      const isRedFlagDay = day === 2; // Day 2: Acute chest tightness (RED FLAG)
+      const isYellowFlagDay = day === 6; // Day 6: Missed evening dose & mild dizziness (YELLOW FLAG)
+
+      const transcriptSnippet = isRedFlagDay
+        ? "I took my Lisinopril this morning, but I've been feeling a strange chest tightness and mild shortness of breath after climbing the stairs."
+        : isYellowFlagDay
+        ? "Slept okay, about 6 hours. But I missed my evening Metformin dose because I was out visiting family, and felt mild lightheadedness."
+        : "Good morning. Took all my morning medications with breakfast. Slept 8 hours and walked around the garden feeling good.";
+
+      const aiToneSummary = isRedFlagDay
+        ? "Anxious • Reported Physical Discomfort"
+        : isYellowFlagDay
+        ? "Hesitant • Missed Statin Dose"
+        : "Calm • High Adherence";
+
+      const riskFlag = isRedFlagDay ? "Red Flag" : isYellowFlagDay ? "Yellow Flag" : "Stable";
 
       const conversation = await Conversation.create({
         patientId: robertPatient._id,
@@ -158,12 +203,18 @@ async function seedDatabase() {
         status: 'completed',
         type: day === 7 ? 'weekly' : 'daily',
         summary: `Daily voice check-in for Day -${day}. Patient discussed medication adherence, sleep, and physical activity.`,
+        transcriptSnippet,
+        durationSeconds: 192,
+        aiToneSummary,
+        sttAccuracy: isRedFlagDay ? '98%' : '99%',
+        riskFlag,
+        turns: [
+          { role: 'assistant', content: 'Good morning, Robert. How are you feeling today, and did you take your morning medications?', timestamp: startTime },
+          { role: 'user', content: transcriptSnippet, timestamp: new Date(startTime.getTime() + 60000) },
+          { role: 'assistant', content: isRedFlagDay ? 'Robert, I hear you reporting chest tightness. I am escalating this immediately to your care team.' : 'Thank you for updating me, Robert. I have logged your vitals and activity for Dr. Jenkins.', timestamp: endTime }
+        ]
       });
       totalConversations++;
-
-      // Baseline normal check-in data with subtle daily fluctuations
-      const isRedFlagDay = day === 2; // Day 2: Acute chest tightness (RED FLAG)
-      const isYellowFlagDay = day === 6; // Day 6: Missed evening dose & mild dizziness (YELLOW FLAG)
 
       const checkin = await Checkin.create({
         patientId: robertPatient._id,
@@ -260,6 +311,18 @@ async function seedDatabase() {
     // --- Generate Eleanor Vance's 10-day timeline ---
     for (let day = 10; day >= 1; day--) {
       const startTime = daysAgo(day, 10);
+      const isKneeStiffnessDay = day === 4;
+
+      const transcriptSnippet = isKneeStiffnessDay
+        ? "My right knee has been quite stiff and aching this morning. The damp weather seems to make moving around a bit harder."
+        : "Feeling quite well today. Took my Amlodipine on time, had a lovely bowl of vegetable soup, and walked in the courtyard.";
+
+      const aiToneSummary = isKneeStiffnessDay
+        ? "Calm • Reported Joint Stiffness"
+        : "Cheerful • High Adherence";
+
+      const riskFlag = isKneeStiffnessDay ? "Yellow Flag" : "Stable";
+
       const conversation = await Conversation.create({
         patientId: eleanorPatient._id,
         startedAt: startTime,
@@ -267,10 +330,18 @@ async function seedDatabase() {
         status: 'completed',
         type: 'daily',
         summary: `Daily check-in for Eleanor Vance. Monitoring arthritis stiffness and fluid intake.`,
+        transcriptSnippet,
+        durationSeconds: 165,
+        aiToneSummary,
+        sttAccuracy: '97%',
+        riskFlag,
+        turns: [
+          { role: 'assistant', content: 'Hello Eleanor, how is your mobility and comfort today?', timestamp: startTime },
+          { role: 'user', content: transcriptSnippet, timestamp: new Date(startTime.getTime() + 45000) },
+          { role: 'assistant', content: isKneeStiffnessDay ? 'I have noted the right knee stiffness in your health journal for Dr. Jenkins to review.' : 'Wonderful to hear, Eleanor. Keep staying active and hydrated!', timestamp: new Date(startTime.getTime() + 90000) }
+        ]
       });
       totalConversations++;
-
-      const isKneeStiffnessDay = day === 4;
 
       await Checkin.create({
         patientId: eleanorPatient._id,
@@ -311,6 +382,7 @@ async function seedDatabase() {
     // --- Generate Arthur Pendelton's 10-day timeline ---
     for (let day = 10; day >= 1; day--) {
       const startTime = daysAgo(day, 11);
+      const transcriptSnippet = "Everything is going well today. Took all my pills on time, went for a 30 minute walk in the garden, and drank plenty of water.";
       const conversation = await Conversation.create({
         patientId: arthurPatient._id,
         startedAt: startTime,
@@ -318,6 +390,16 @@ async function seedDatabase() {
         status: 'completed',
         type: 'daily',
         summary: `Daily check-in for Arthur Pendelton. Consistent blood sugar management and daily strolls.`,
+        transcriptSnippet,
+        durationSeconds: 245,
+        aiToneSummary: 'Cheerful • High Adherence',
+        sttAccuracy: '99%',
+        riskFlag: 'Stable',
+        turns: [
+          { role: 'assistant', content: 'Good morning Arthur, how was your night and morning routine?', timestamp: startTime },
+          { role: 'user', content: transcriptSnippet, timestamp: new Date(startTime.getTime() + 50000) },
+          { role: 'assistant', content: 'Excellent consistency Arthur. Your blood sugar routine is right on track.', timestamp: new Date(startTime.getTime() + 95000) }
+        ]
       });
       totalConversations++;
 

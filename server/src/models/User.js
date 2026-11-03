@@ -28,6 +28,33 @@ const userSchema = new mongoose.Schema(
       default: 'PATIENT',
       required: true,
     },
+    phone: {
+      type: String,
+      trim: true,
+    },
+    clinicName: {
+      type: String,
+      trim: true,
+    },
+    preferences: {
+      voiceSpeed: {
+        type: String,
+        enum: ['slow', 'normal', 'fast'],
+        default: 'normal',
+      },
+      notificationsEnabled: {
+        type: Boolean,
+        default: true,
+      },
+      redFlagSMS: {
+        type: Boolean,
+        default: true,
+      },
+      dailyDigest: {
+        type: Boolean,
+        default: true,
+      },
+    },
   },
   {
     timestamps: true,

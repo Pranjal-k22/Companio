@@ -26,6 +26,9 @@ import reportsRouter from './routes/reports.js';
 import patientsRouter from './routes/patients.js';
 import checkinsRouter from './routes/checkins.js';
 import flagsRouter from './routes/flags.js';
+import appointmentsRouter from './routes/appointments.js';
+import labResultsRouter from './routes/labResults.js';
+import conversationsRouter from './routes/conversations.js';
 import { socketAuthMiddleware } from './sockets/socketAuth.js';
 import { initVoiceSocket } from './sockets/voiceSession.js';
 
@@ -134,6 +137,9 @@ async function runVerification() {
   app.use('/api/patients', patientsRouter);
   app.use('/api/checkins', checkinsRouter);
   app.use('/api/flags', flagsRouter);
+  app.use('/api/appointments', appointmentsRouter);
+  app.use('/api/lab-results', labResultsRouter);
+  app.use('/api/conversations', conversationsRouter);
 
   const server = http.createServer(app);
   const io = new SocketIOServer(server, { cors: { origin: '*' } });
@@ -289,6 +295,47 @@ async function runVerification() {
     recordTest('REST API', 'POST /api/reports/:patientId/generate', 'PASS', `New report generated at ${genReportRes.data.report.generatedAt}`);
   } else {
     recordTest('REST API', 'POST /api/reports/:patientId/generate', 'FAIL', `Status: ${genReportRes.status}`);
+  }
+
+  // GET /api/conversations (Audit Logs & Transcripts)
+  const convsRes = await apiFetch('/api/conversations', { token: clinicianToken });
+  if (convsRes.status === 200 && Array.isArray(convsRes.data.conversations) && convsRes.data.conversations.length > 0) {
+    recordTest('REST API', 'GET /api/conversations (Audit Logs & Transcripts)', 'PASS', `${convsRes.data.count} conversations retrieved with STT snippets`);
+  } else {
+    recordTest('REST API', 'GET /api/conversations (Audit Logs & Transcripts)', 'FAIL', `Status: ${convsRes.status}`);
+  }
+
+  // PUT /api/auth/profile (User Preferences & Contact)
+  const profileRes = await apiFetch('/api/auth/profile', {
+    method: 'PUT',
+    token: patientToken,
+    body: {
+      phone: '+1-555-019-2834',
+      preferences: { voiceSpeed: 'slow', notificationsEnabled: true },
+      emergencyContact: { name: 'Mary Miller', relationship: 'Spouse', phone: '+1-555-019-2835' },
+    },
+  });
+  if (profileRes.status === 200 && profileRes.data.user?.preferences?.voiceSpeed === 'slow') {
+    recordTest('REST API', 'PUT /api/auth/profile (User Preferences & Contact)', 'PASS', 'Patient profile & voiceSpeed updated');
+  } else {
+    recordTest('REST API', 'PUT /api/auth/profile (User Preferences & Contact)', 'FAIL', `Status: ${profileRes.status}`);
+  }
+
+  // GET /api/appointments (Clinical Appointments)
+  const apptsRes = await apiFetch('/api/appointments', { token: patientToken });
+  if (apptsRes.status === 200 && Array.isArray(apptsRes.data.appointments)) {
+    recordTest('REST API', 'GET /api/appointments (Clinical Appointments)', 'PASS', `${apptsRes.data.appointments.length} appointments retrieved`);
+  } else {
+    recordTest('REST API', 'GET /api/appointments (Clinical Appointments)', 'FAIL', `Status: ${apptsRes.status}`);
+  }
+
+  // GET /api/lab-results/patient/:patientId (Diagnostic Panels)
+  const labsRes = await apiFetch(`/api/lab-results/patient/${samplePatientId}`, { token: clinicianToken });
+  const panels = labsRes.data?.labResults || labsRes.data?.labs;
+  if (labsRes.status === 200 && Array.isArray(panels)) {
+    recordTest('REST API', 'GET /api/lab-results/patient/:patientId (Diagnostic Panels)', 'PASS', `${panels.length} panels retrieved`);
+  } else {
+    recordTest('REST API', 'GET /api/lab-results/patient/:patientId (Diagnostic Panels)', 'FAIL', `Status: ${labsRes.status}`);
   }
 
   // Unauthenticated protection (401)

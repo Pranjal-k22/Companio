@@ -48,4 +48,5 @@ export const verifyToken = async (req, res, next) => {
   }
 };
 
+export const authenticateToken = verifyToken;
 export default verifyToken;

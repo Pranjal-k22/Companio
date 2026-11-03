@@ -178,6 +178,14 @@ export const getMe = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        phone: user.phone || patientProfile?.contact?.phone || '',
+        clinicName: user.clinicName || '',
+        preferences: user.preferences || {
+          voiceSpeed: 'normal',
+          notificationsEnabled: true,
+          redFlagSMS: true,
+          dailyDigest: true,
+        },
         patientProfile,
       },
     });
@@ -187,5 +195,79 @@ export const getMe = async (req, res) => {
       success: false,
       message: 'Server error fetching user profile.',
     });
+  }
+};
+
+/**
+ * @route   PUT /api/auth/profile
+ * @desc    Update current authenticated user profile & preferences
+ * @access  Private (JWT required)
+ */
+export const updateProfile = async (req, res) => {
+  try {
+    const {
+      name,
+      phone,
+      clinicName,
+      preferences,
+      emergencyContact,
+      baselineMetrics,
+    } = req.body;
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    if (name) user.name = name.trim();
+    if (phone !== undefined) user.phone = phone.trim();
+    if (clinicName !== undefined) user.clinicName = clinicName.trim();
+    if (preferences) {
+      user.preferences = {
+        ...user.preferences,
+        ...preferences,
+      };
+    }
+
+    await user.save();
+
+    let patientProfile = null;
+    if (user.role === 'PATIENT') {
+      const updateData = {};
+      if (name) updateData.name = name.trim();
+      if (phone !== undefined) {
+        updateData['contact.phone'] = phone.trim();
+      }
+      if (emergencyContact) {
+        updateData.emergencyContact = emergencyContact;
+      }
+      if (baselineMetrics) {
+        updateData.baselineMetrics = baselineMetrics;
+      }
+
+      patientProfile = await Patient.findOneAndUpdate(
+        { userId: user._id },
+        { $set: updateData },
+        { new: true }
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully.',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        clinicName: user.clinicName,
+        preferences: user.preferences,
+        patientProfile,
+      },
+    });
+  } catch (error) {
+    console.error('[Auth Error] updateProfile failed:', error);
+    return res.status(500).json({ success: false, message: 'Server error updating profile.' });
   }
 };
