@@ -285,14 +285,16 @@ export async function generateClinicianReport(patientId, periodStart, periodEnd)
   const apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
   if (apiKey && !apiKey.includes('your_')) {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
-      generationConfig: { responseMimeType: 'application/json' },
-    });
+    const candidateModels = [process.env.GEMINI_MODEL || 'gemini-3.8-flash', 'gemini-2.5-flash'];
     let retryAttempt = 0;
     let lastError = null;
 
-    while (retryAttempt < 2) {
+    while (retryAttempt < candidateModels.length) {
+      const activeModelName = candidateModels[retryAttempt];
+      const model = genAI.getGenerativeModel({
+        model: activeModelName,
+        generationConfig: { responseMimeType: 'application/json' },
+      });
       try {
         const promptSystem = `
 You are a clinical documentation assistant generating a structured report for clinician review.

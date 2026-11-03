@@ -68,13 +68,16 @@ async function runReportGeneratorVerification() {
     console.log(`Follow Up Actions:`, report.followUp);
     console.log(`Trends (Adherence: ${report.trends?.adherencePct}%, Sleep: ${report.trends?.sleepAvg}h, Activity: ${report.trends?.activityAvg}m, Hydration: ${report.trends?.hydrationAvg}mL)`);
 
-    // 4. Test Fallback Path with Invalid OpenAI API Key
+    // 4. Test Fallback Path with Invalid API Key
     console.log('\n--- Test 3: Fallback Path Verification (Invalid API Key) ---');
     const originalApiKey = process.env.OPENAI_API_KEY;
+    const originalGeminiKey = process.env.GEMINI_API_KEY;
     process.env.OPENAI_API_KEY = 'sk-proj-invalid-key-for-testing-fallback-path';
+    process.env.GEMINI_API_KEY = 'invalid-gemini-key-for-testing-fallback-path';
 
     const fallbackReport = await generateClinicianReport(robert._id, periodStart, periodEnd);
     process.env.OPENAI_API_KEY = originalApiKey; // Restore original API key
+    process.env.GEMINI_API_KEY = originalGeminiKey;
 
     console.log(`✔ Fallback Report generated successfully without throwing (${fallbackReport._id})`);
     console.log(`Fallback Overview: ${fallbackReport.overview}`);

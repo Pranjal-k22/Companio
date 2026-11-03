@@ -249,24 +249,26 @@ export async function processConversationTurn(userTranscript, sessionContext) {
   const apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
 
   if (apiKey && !apiKey.includes('your_')) {
-    try {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash',
-        systemInstruction: HEALTH_AGENT_SYSTEM_PROMPT,
-        tools: geminiTools,
-      });
+    const candidateModels = [process.env.GEMINI_MODEL || 'gemini-3.8-flash', 'gemini-2.5-flash'];
+    for (const modelName of candidateModels) {
+      try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction: HEALTH_AGENT_SYSTEM_PROMPT,
+          tools: geminiTools,
+        });
 
-      const contents = [
-        ...(sessionContext.history || []).map((msg) => ({
-          role: msg.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: msg.content }],
-        })),
-        { role: 'user', parts: [{ text: userTranscript }] },
-      ];
+        const contents = [
+          ...(sessionContext.history || []).map((msg) => ({
+            role: msg.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: msg.content }],
+          })),
+          { role: 'user', parts: [{ text: userTranscript }] },
+        ];
 
-      const result = await model.generateContent({ contents });
-      const response = await result.response;
+        const result = await model.generateContent({ contents });
+        const response = await result.response;
 
       // Handle Gemini Function Calls
       const functionCalls = response.functionCalls();
@@ -294,6 +296,7 @@ export async function processConversationTurn(userTranscript, sessionContext) {
       console.warn(`[Gemini LLM Warning] ${err.message}. Falling back to deterministic NLP engine.`);
     }
   }
+}
 
   // Deterministic Clinical Fallback Engine if API key is unconfigured or fails
   return processClinicalFallbackTurn(userTranscript, sessionContext);
