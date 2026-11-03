@@ -77,3 +77,4 @@ node server/src/migrations/index.js --verify
 1. **Idempotence**: The migration queries specifically for `{ $or: [{ organizationId: null }, { organizationId: { $exists: false } }] }`. Re-running the script is safe and non-destructive.
 2. **Rollback Script**: If an emergency rollback is required, documents retain original IDs and timestamps. Removing `organizationId` or querying documents created prior to migration timestamp restores legacy behavior.
 3. **Database Backup**: Standard mongodump snapshots are captured prior to production cluster migrations.
+

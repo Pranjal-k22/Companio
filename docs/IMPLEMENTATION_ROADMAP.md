@@ -3,7 +3,7 @@
 **Document Reference**: `docs/IMPLEMENTATION_ROADMAP.md`  
 **Target Architecture**: Modular Monolith + Dedicated Voice Gateway + Distributed Worker  
 **Product**: AI Voice-First Health & Wellness Platform for Adults 55+  
-**Current Phase**: Phase 2 Complete (Awaiting Phase 3 Authorization)  
+**Current Phase**: Phase 3 Complete (Awaiting Phase 4 Authorization)  
 **Execution Philosophy**: Small verified increments; zero disruption to working code; preserve existing route compatibility.
 
 ---
@@ -11,9 +11,9 @@
 ## Roadmap Overview
 
 ```
-Phase 0 [DONE] ──► Phase 1 [DONE] ──► Phase 2 [DONE] ──► Phase 3 [NEXT] ──► Phase 4 ──► Phase 5
-Baseline Audit     API & v1           Tenancy & Auth     Consent &          Voice Hard-  Convers-
-                   Foundations                           Privacy            ening        ation Plan
+Phase 0 [DONE] ──► Phase 1 [DONE] ──► Phase 2 [DONE] ──► Phase 3 [DONE] ──► Phase 4 [NEXT] ──► Phase 5
+Baseline Audit     API & v1           Tenancy & Auth     Consent &          Voice Hard-        Convers-
+                   Foundations                           Privacy            ening              ation Plan
 ```
 
 ---
@@ -65,20 +65,28 @@ Baseline Audit     API & v1           Tenancy & Auth     Consent &          Voic
 
 ---
 
-## Phase 3: Consent & Privacy Engineering (Status: ⏳ PENDING AUTHORIZATION)
+## Phase 3: Consent & Privacy Engineering (Status: ✅ COMPLETED)
 * **Goal**: Build an immutable, versioned consent engine and ensure zero PHI or unredacted clinical data leaks into logs or third-party storage.
-* **Key Tasks**:
-  1. Create `ConsentRecord` schema (`patientId`, `purpose`, `noticeVersion`, `decision` [GRANTED/WITHDRAWN], `channel`, `actor`, `timestamp`).
-  2. Separate consent for live streaming transcription from durable audio recording retention.
-  3. Set `AUDIO_RETENTION_MODE=disabled` by default across server and client.
-  4. Implement centralized logger with automated PHI redaction (masks patient names, phone numbers, transcripts, and session tokens).
-  5. Create automated consent verification hook prior to starting `/voice` Socket.io sessions.
-  6. Add consent history endpoints (`GET /api/v1/patients/:id/consents`, `POST /api/v1/patients/:id/consents`).
-* **Exit Criteria**: Voice session fails with explicit consent error if patient has withdrawn live transcription consent; zero PHI in test run logs.
+* **Deliverables**:
+  - `ConsentRecord` Model (`server/src/models/ConsentRecord.js`) with Mongoose immutability and deletion protection hooks
+  - Granular Consent Purposes (`MICROPHONE`, `LIVE_TRANSCRIPTION`, `AI_PROCESSING`, `AUDIO_RETENTION`, `CLINICIAN_SHARING`)
+  - Real-Time Voice Gateway Verification Hook (`server/src/sockets/voiceSession.js`) blocking sessions on missing/withdrawn consent
+  - `AUDIO_RETENTION_MODE=disabled` enforcement across server, `.env.example`, and `.env` (transient streaming only)
+  - Privacy REST API (`server/src/controllers/consentController.js`, `server/src/routes/patients.js`):
+    - `GET /api/v1/patients/:id/consents` (effective status & chronological audit log)
+    - `POST /api/v1/patients/:id/consents` (append versioned decision)
+    - `POST /api/v1/patients/:id/consents/withdraw` (convenience withdrawal)
+    - `GET /api/v1/patients/:id/export` (DSAR HIPAA/GDPR bundle)
+    - `POST /api/v1/patients/:id/anonymize` (Right to Erasure demographic masking)
+  - Centralized Logger Deep PHI Redaction (`server/src/utils/logger.js`) with regular expression masking for phones, emails, SSNs, and transcripts
+  - Baseline Consent Migration Script (`server/src/migrations/002_phase3_consent_privacy.js`) backfilling 18 patients with default audio retention disabled
+  - Automated Verification Suite: `server/src/testPrivacyConsent.js` (20/20 checks passing)
+  - Specifications: `docs/CONSENT_AND_PRIVACY_ARCHITECTURE.md`, `docs/PHASE_3_COMPLETION_REPORT.md`
+* **Exit Criteria**: Voice session fails with explicit `CONSENT_WITHDRAWN` error if patient has withdrawn live transcription or AI processing consent; zero PHI leaks in logs; all 20 privacy checks and all regression suites pass. (Met on 2026-11-03)
 
 ---
 
-## Phase 4: Voice Gateway Hardening & Audio Protocol
+## Phase 4: Voice Gateway Hardening & Audio Protocol (Status: ⏳ PENDING AUTHORIZATION)
 * **Goal**: Harden the real-time Socket.io voice gateway with strict state machine transitions, sequence validation, backpressure, and barge-in audio cancellation.
 * **Key Tasks**:
   1. Define explicit Voice Session Finite State Machine (FSM): `IDLE` ➔ `CONNECTING` ➔ `LISTENING` ➔ `THINKING` ➔ `SPEAKING` ➔ `FINALIZING` ➔ `COMPLETED` (plus `INTERRUPTED`, `FAILED`, `ABANDONED`).

@@ -10,6 +10,16 @@ import { validateRequest } from '../middleware/validate.js';
 import { objectIdSchema } from '../validators/common.schemas.js';
 import { patientCreateSchema } from '../validators/patient.schemas.js';
 import { PERMISSIONS } from '../constants/permissions.js';
+import {
+  getPatientConsents,
+  updatePatientConsent,
+  withdrawPatientConsent,
+  exportPatientDataHandler,
+  anonymizePatientHandler,
+} from '../controllers/consentController.js';
+import {
+  anonymizePatientSchema,
+} from '../validators/consent.schemas.js';
 import { z } from 'zod';
 
 const router = express.Router();
@@ -160,6 +170,79 @@ router.get(
       next(error);
     }
   }
+);
+
+/**
+ * @route   GET /api/v1/patients/:patientId/consents
+ * @desc    Get effective consent status and chronological audit log
+ * @access  Private (Patient Self, Care Team Clinician, Org Admin)
+ */
+router.get(
+  '/:patientId/consents',
+  verifyToken,
+  tenantContext,
+  validateRequest({ params: patientParamSchema }),
+  requireCareTeamOrSelf('patientId'),
+  getPatientConsents
+);
+
+/**
+ * @route   POST /api/v1/patients/:patientId/consents
+ * @desc    Record new versioned consent decision(s)
+ * @access  Private (Patient Self, Care Team Clinician, Org Admin)
+ */
+router.post(
+  '/:patientId/consents',
+  verifyToken,
+  tenantContext,
+  validateRequest({ params: patientParamSchema }),
+  requireCareTeamOrSelf('patientId'),
+  updatePatientConsent
+);
+
+/**
+ * @route   POST /api/v1/patients/:patientId/consents/withdraw
+ * @desc    Withdraw patient consent for specific or all purposes
+ * @access  Private (Patient Self, Care Team Clinician, Org Admin)
+ */
+router.post(
+  '/:patientId/consents/withdraw',
+  verifyToken,
+  tenantContext,
+  validateRequest({ params: patientParamSchema }),
+  requireCareTeamOrSelf('patientId'),
+  withdrawPatientConsent
+);
+
+/**
+ * @route   GET /api/v1/patients/:patientId/export
+ * @desc    Data Subject Access Request (DSAR) - Export all patient data in HIPAA/GDPR bundle
+ * @access  Private (Patient Self, Care Team Clinician, Org Admin)
+ */
+router.get(
+  '/:patientId/export',
+  verifyToken,
+  tenantContext,
+  validateRequest({ params: patientParamSchema }),
+  requireCareTeamOrSelf('patientId'),
+  exportPatientDataHandler
+);
+
+/**
+ * @route   POST /api/v1/patients/:patientId/anonymize
+ * @desc    Right to Erasure / Anonymization - Redact demographics and revoke all consents
+ * @access  Private (Org Admin or Clinician with PATIENTS_ARCHIVE permission)
+ */
+router.post(
+  '/:patientId/anonymize',
+  verifyToken,
+  tenantContext,
+  validateRequest({
+    params: patientParamSchema,
+    body: anonymizePatientSchema,
+  }),
+  requireCareTeamOrSelf('patientId'),
+  anonymizePatientHandler
 );
 
 export default router;

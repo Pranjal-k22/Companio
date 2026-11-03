@@ -16,21 +16,40 @@ const SENSITIVE_KEYS = new Set([
   'twilio_auth_token',
   'creditcard',
   'ssn',
+  'transcript',
+  'usertranscript',
+  'finaltranscript',
+  'partialtranscript',
+  'rawaudio',
+  'speechtext',
+  'audiochunk',
+  'audiodata',
 ]);
 
+const PHI_PATTERNS = [
+  // Email pattern
+  { regex: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, replacement: '[REDACTED_EMAIL]' },
+  // US and international phone formats (+1 555-123-4567, 555-123-4567, etc.)
+  { regex: /(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g, replacement: '[REDACTED_PHONE]' },
+  // Social Security Numbers (XXX-XX-XXXX)
+  { regex: /\b\d{3}-\d{2}-\d{4}\b/g, replacement: '[REDACTED_SSN]' },
+  // JWT Bearer tokens
+  { regex: /^Bearer\s+eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/g, replacement: '[REDACTED_JWT_TOKEN]' },
+];
+
 /**
- * Deeply redacts sensitive keys from an object or string before logging.
+ * Deeply redacts sensitive keys and PHI patterns from an object or string before logging.
  * Prevents PHI, tokens, and credentials from leaking into server logs.
  */
 export function redactSensitiveData(data, depth = 0) {
   if (depth > 6 || !data) return data;
 
   if (typeof data === 'string') {
-    // Mask potential JWT tokens
-    if (/^Bearer\s+eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/.test(data)) {
-      return '[REDACTED_JWT_TOKEN]';
+    let sanitizedString = data;
+    for (const pattern of PHI_PATTERNS) {
+      sanitizedString = sanitizedString.replace(pattern.regex, pattern.replacement);
     }
-    return data;
+    return sanitizedString;
   }
 
   if (Array.isArray(data)) {

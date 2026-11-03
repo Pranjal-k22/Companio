@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import { runMigration, verifyMigration } from './001_phase2_multi_tenancy.js';
+import { runMigration as runMigration001, verifyMigration } from './001_phase2_multi_tenancy.js';
+import { up as runMigration002 } from './002_phase3_consent_privacy.js';
 
 dotenv.config();
 
@@ -25,10 +26,15 @@ async function main() {
         console.warn('⚠️ Some records are still missing organizationId.');
       }
     } else {
-      console.log(`\n--- RUNNING MIGRATION (${isDryRun ? 'DRY-RUN' : 'LIVE EXECUTION'}) ---`);
-      const result = await runMigration({ dryRun: isDryRun });
-      console.log('\n--- MIGRATION SUMMARY ---');
-      console.log(JSON.stringify(result, null, 2));
+      console.log(`\n--- RUNNING MIGRATION 001: MULTI-TENANCY (${isDryRun ? 'DRY-RUN' : 'LIVE EXECUTION'}) ---`);
+      const result001 = await runMigration001({ dryRun: isDryRun });
+      console.log('\n--- MIGRATION 001 SUMMARY ---');
+      console.log(JSON.stringify(result001, null, 2));
+
+      console.log(`\n--- RUNNING MIGRATION 002: CONSENT & PRIVACY BASELINE (${isDryRun ? 'DRY-RUN' : 'LIVE EXECUTION'}) ---`);
+      const result002 = await runMigration002({ dryRun: isDryRun });
+      console.log('\n--- MIGRATION 002 SUMMARY ---');
+      console.log(JSON.stringify(result002, null, 2));
 
       // Post-migration verification
       if (!isDryRun) {
@@ -50,4 +56,5 @@ if (process.argv[1] && process.argv[1].endsWith('index.js')) {
   main();
 }
 
-export { runMigration, verifyMigration };
+export { runMigration001, runMigration002, verifyMigration };
+

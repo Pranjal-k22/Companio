@@ -58,3 +58,4 @@ The dedicated multi-tenancy verification suite ([`server/src/testMultiTenancy.js
 18. **Background Cron Worker Tenant Scoping**: Strictly processed Org A patients without cross-tenant aggregation.
 19. **Aggregation Pipeline Scoping**: `$match: { organizationId }` prevents cross-tenant flag/metric leakage.
 20. **Populate Reference Integrity**: Zero cross-tenant documents populated in foreign queries.
+

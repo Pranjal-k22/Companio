@@ -5,6 +5,24 @@ All notable changes to the Companio healthcare platform will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-11-03
+
+### Added
+- **Immutable Consent Ledger**: Created `ConsentRecord` schema (`server/src/models/ConsentRecord.js`) with Mongoose immutability pre-hooks preventing modifications and direct deletions.
+- **Granular Consent Purposes**: Support for 5 explicit categories (`MICROPHONE`, `LIVE_TRANSCRIPTION`, `AI_PROCESSING`, `AUDIO_RETENTION`, `CLINICIAN_SHARING`) with notice versioning (`2026.1`).
+- **Real-Time Voice Gateway Consent Hook**: Socket.io `/voice` namespace deterministically enforces active consent for `LIVE_TRANSCRIPTION` and `AI_PROCESSING` before session allocation, returning `CONSENT_WITHDRAWN` error.
+- **Transient Audio Enforcement**: Configured `AUDIO_RETENTION_MODE=disabled` by default across server and client, ensuring raw audio buffers are never persistently stored.
+- **Privacy REST Endpoints**: Added `/api/v1/patients/:id/consents`, `/api/v1/patients/:id/consents/withdraw`, `/api/v1/patients/:id/export` (DSAR), and `/api/v1/patients/:id/anonymize` (Right to Erasure).
+- **Deep PHI Log Redaction**: Pattern-based regular expressions in `server/src/utils/logger.js` automatically redacting phone numbers, email addresses, SSNs, and conversational transcripts.
+- **Phase 3 Migration Script**: Added `002_phase3_consent_privacy.js` seeding baseline clinical consent records across all enrolled patients with `AUDIO_RETENTION` disabled.
+- **Automated Privacy & Consent Test Suite**: Created `server/src/testPrivacyConsent.js` validating all 20 security and privacy guarantees.
+- **Architectural Documentation**: Authored `docs/CONSENT_AND_PRIVACY_ARCHITECTURE.md` and updated `docs/ARCHITECTURE.md`.
+
+### Changed
+- Updated `Patient.js` schema with `isAnonymized` and `anonymizedAt` fields.
+- Updated `VoiceSession.jsx` with real-time senior-friendly consent withdrawn notification banner.
+- Updated permissions catalog (`server/src/constants/permissions.js`) with consent and privacy management permissions.
+
 ## [1.2.0] - 2026-11-03
 
 ### Added

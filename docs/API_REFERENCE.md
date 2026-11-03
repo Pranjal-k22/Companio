@@ -186,6 +186,18 @@ The Companio API adheres to modern enterprise healthcare API conventions:
 - `GET /api/v1/lab-results/patient/:patientId` (Protected)
   - Retrieves blood panels, metabolic markers, and diagnostic test results.
 
+### 4.8 Patient Consent & Privacy Controls (Phase 3)
+- `GET /api/v1/patients/:patientId/consents` (Protected: Self, Care-Team, Org Admin)
+  - Returns active effective consent status across all 5 categories (`MICROPHONE`, `LIVE_TRANSCRIPTION`, `AI_PROCESSING`, `AUDIO_RETENTION`, `CLINICIAN_SHARING`) and chronological audit trail.
+- `POST /api/v1/patients/:patientId/consents` (Protected: Self, Care-Team, Org Admin)
+  - Appends new versioned consent decision(s). Body: `{ purpose, decision, noticeVersion?, notes? }` or `{ decisions: [...] }`.
+- `POST /api/v1/patients/:patientId/consents/withdraw` (Protected: Self, Care-Team, Org Admin)
+  - Withdraws consent for specified purposes or all purposes. Body: `{ purposes?: ['LIVE_TRANSCRIPTION'], notes? }`.
+- `GET /api/v1/patients/:patientId/export` (Protected: Self, Care-Team, Org Admin)
+  - Data Subject Access Request (DSAR) generating a full, sanitized HIPAA/GDPR patient data package.
+- `POST /api/v1/patients/:patientId/anonymize` (Protected: Org Admin or Clinician with `PATIENTS_ARCHIVE`)
+  - Right to Erasure workflow: masks patient demographics to `Anonymized Patient (XXXX)` and automatically revokes all consent grants.
+
 ---
 
 ## 5. Real-Time Voice Gateway (`/voice` Socket.io Namespace)

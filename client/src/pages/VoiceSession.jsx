@@ -19,6 +19,7 @@ export default function VoiceSession() {
   const [isUncertain, setIsUncertain] = useState(false);
   const [agentResponseText, setAgentResponseText] = useState('');
   const [ttsError, setTtsError] = useState(null);
+  const [consentError, setConsentError] = useState(null);
   const [audioChunksSent, setAudioChunksSent] = useState(0);
   const [audioChunksReceived, setAudioChunksReceived] = useState(0);
   const [eventLogs, setEventLogs] = useState([]);
@@ -158,6 +159,9 @@ export default function VoiceSession() {
 
     voiceSocket.on('voice:error', (err) => {
       setPipelineState('ERROR');
+      if (err?.code === 'CONSENT_WITHDRAWN' || err?.code === 'CONSENT_REQUIRED' || (err?.missingConsents && err.missingConsents.length > 0)) {
+        setConsentError(err.message || 'Required consent for speech transcription or AI processing is withdrawn.');
+      }
       addLog('voice:error', err);
     });
 
@@ -181,6 +185,7 @@ export default function VoiceSession() {
     setPartialTranscript('');
     setAgentResponseText('');
     setTtsError(null);
+    setConsentError(null);
     setAudioChunksSent(0);
     setAudioChunksReceived(0);
     setConfidenceScore(null);
@@ -252,6 +257,14 @@ export default function VoiceSession() {
         <div className="bg-red-950/80 border-b border-red-800/80 p-4 text-center flex items-center justify-center gap-3 text-red-200 text-sm font-medium">
           <ShieldAlert className="w-5 h-5 text-red-400 shrink-0" />
           <span>{micError}</span>
+        </div>
+      )}
+
+      {/* Consent Withdrawn / Missing Error Banner */}
+      {consentError && (
+        <div className="bg-amber-950/90 border-b border-amber-800/80 p-4 text-center flex items-center justify-center gap-3 text-amber-200 text-sm font-medium">
+          <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0" />
+          <span>{consentError}</span>
         </div>
       )}
 

@@ -52,3 +52,4 @@ export const updateTeamSchema = createTeamSchema.partial();
 export const switchOrganizationSchema = z.object({
   organizationId: z.string().min(1),
 });
+

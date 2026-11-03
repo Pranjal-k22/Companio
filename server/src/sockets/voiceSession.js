@@ -3,6 +3,7 @@ import { createAssemblyAISTTStream } from '../services/voice/stt/assemblyAISTT.j
 import { processConversationTurn } from '../services/voice/llm/healthConversationAgent.js';
 import { runSafetyNetCheck } from '../services/safety/keywordSafetyNet.js';
 import { streamTTSResponse } from '../services/voice/tts/elevenLabsTTS.js';
+import { verifyVoiceConsent, AUDIO_RETENTION_MODE } from '../services/consentService.js';
 
 // In-memory active voice sessions dictionary: Map<socketId, sessionState>
 const activeSessions = new Map();
@@ -59,6 +60,20 @@ export const initVoiceSocket = (io) => {
           if (!patientExists) {
             console.warn(`[Voice Socket Security] Blocked session start: Patient ${patientId} does not belong to Org ${orgId}`);
             return socket.emit('voice:error', { message: 'Unauthorized: Patient does not belong to your organization.' });
+          }
+
+          // Phase 3: Enforce Immutable Consent Verification Hook
+          // Voice sessions require active GRANTED consent for LIVE_TRANSCRIPTION and AI_PROCESSING
+          const consentCheck = await verifyVoiceConsent(orgId, patientId);
+          if (!consentCheck.allowed) {
+            console.warn(
+              `[Voice Socket Security] Blocked session start: Patient ${patientId} missing required consent: ${consentCheck.missing.join(', ')}`
+            );
+            return socket.emit('voice:error', {
+              code: 'CONSENT_WITHDRAWN',
+              message: `Cannot start voice wellness check-in: Required consent for [${consentCheck.missing.join(', ')}] is missing or withdrawn.`,
+              missingConsents: consentCheck.missing,
+            });
           }
         }
 
@@ -132,7 +147,8 @@ export const initVoiceSocket = (io) => {
       session.audioChunksReceived++;
 
       try {
-        // Forward binary audio chunk to AssemblyAI Live STT stream
+        // Enforce AUDIO_RETENTION_MODE: Transient streaming only.
+        // Raw audio buffers are passed strictly to the active STT stream and are never persisted to disk or DB.
         if (session.sttStream) {
           session.sttStream.sendAudioChunk(chunk);
         }

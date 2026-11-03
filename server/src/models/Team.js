@@ -56,3 +56,4 @@ teamSchema.index({ organizationId: 1, status: 1 });
 
 export const Team = mongoose.model('Team', teamSchema);
 export default Team;
+

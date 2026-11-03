@@ -11,6 +11,12 @@ import Organization from './Organization.js';
 import Membership from './Membership.js';
 import Team from './Team.js';
 import Invitation from './Invitation.js';
+import ConsentRecord, {
+  CONSENT_PURPOSES,
+  CONSENT_DECISIONS,
+  CONSENT_CHANNELS,
+  CONSENT_ACTOR_ROLES,
+} from './ConsentRecord.js';
 
 export {
   User,
@@ -26,6 +32,11 @@ export {
   Membership,
   Team,
   Invitation,
+  ConsentRecord,
+  CONSENT_PURPOSES,
+  CONSENT_DECISIONS,
+  CONSENT_CHANNELS,
+  CONSENT_ACTOR_ROLES,
 };
 
 export default {
@@ -42,4 +53,5 @@ export default {
   Membership,
   Team,
   Invitation,
+  ConsentRecord,
 };

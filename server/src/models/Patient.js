@@ -60,6 +60,14 @@ const patientSchema = new mongoose.Schema(
       ref: 'Organization',
       index: true,
     },
+    isAnonymized: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    anonymizedAt: {
+      type: Date,
+    },
   },
   {
     timestamps: true,

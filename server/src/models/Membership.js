@@ -81,3 +81,4 @@ membershipSchema.pre('save', function (next) {
 
 export const Membership = mongoose.model('Membership', membershipSchema);
 export default Membership;
+

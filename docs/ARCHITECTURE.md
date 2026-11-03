@@ -196,3 +196,28 @@ The background cron worker (`server/src/jobs/weeklyReportWorker.js`) processes p
 - Generates reports using tenant-scoped trend metrics.
 - Emits real-time Socket.io notifications only to tenant-isolated rooms (`org:${orgId}:patient:${patientId}`).
 
+---
+
+## 9. Consent & Privacy Engineering (Phase 3)
+
+### 9.1 Immutable Consent Ledger
+Companio records all patient consent decisions in an append-only, versioned ledger (`ConsentRecord`):
+- **Purposes**: `MICROPHONE`, `LIVE_TRANSCRIPTION`, `AI_PROCESSING`, `AUDIO_RETENTION`, `CLINICIAN_SHARING`.
+- **Immutability Guard**: Mongoose middleware traps `updateOne`, `findOneAndUpdate`, and `delete` operations, preventing retroactive modification or destruction of compliance audit logs.
+- **Effective Calculation**: The system queries the latest decision per purpose within the organization scope to determine real-time permissions.
+
+### 9.2 Real-Time Voice Gateway Verification Hook
+Prior to starting a speech session on `/voice`:
+- The gateway verifies that `LIVE_TRANSCRIPTION` and `AI_PROCESSING` consents are actively `GRANTED`.
+- If any required consent is missing or `WITHDRAWN`, the server aborts the session, emits `voice:error` with code `CONSENT_WITHDRAWN`, and logs the blocked attempt.
+
+### 9.3 Default Audio Retention Mode (`AUDIO_RETENTION_MODE=disabled`)
+- Server and client default to zero persistent audio storage.
+- PCM chunks are streamed transiently to AssemblyAI and immediately garbage collected.
+- Durable audio persistence is blocked unless `AUDIO_RETENTION_MODE=durable` and explicit `AUDIO_RETENTION` consent is granted.
+
+### 9.4 Privacy Workflows & PHI Redaction
+- **Data Export (DSAR)**: `GET /api/v1/patients/:id/export` produces a consolidated HIPAA/GDPR data bundle.
+- **Right to Erasure**: `POST /api/v1/patients/:id/anonymize` redacts demographics and automatically revokes all consent grants.
+- **Deep Log Redaction**: Pattern-based regular expressions sanitize phone numbers, emails, SSNs, tokens, and transcripts in application logs.
+

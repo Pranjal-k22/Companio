@@ -120,3 +120,4 @@ invitationSchema.statics.verifyByRawToken = async function (rawToken) {
 
 export const Invitation = mongoose.model('Invitation', invitationSchema);
 export default Invitation;
+

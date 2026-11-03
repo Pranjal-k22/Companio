@@ -93,3 +93,4 @@ Healthcare access requires both organizational membership and a legitimate clini
 - **Clinicians**: May access a patient if directly assigned (`patient.assignedClinicianId === req.user.id`), if member of an assigned clinical `Team`, or if holding organizational lead status (`ORG_OWNER`, `ORG_ADMIN`, `patients:read_all`). Unassigned clinicians are rejected with `403 Forbidden`.
 - **Patients**: May only view their own records (`patient.userId === req.user.id`). Attempting to query another patient yields `403 Forbidden`.
 - **Cross-Tenant Requests**: If an actor queries a patient belonging to a different organization, the system returns `404 Not Found` to prevent patient enumeration attacks.
+

@@ -8,4 +8,5 @@ export * from './report.schemas.js';
 export * from './appointment.schemas.js';
 export * from './labResult.schemas.js';
 export * from './organization.schemas.js';
+export * from './consent.schemas.js';
 

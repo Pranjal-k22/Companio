@@ -274,6 +274,128 @@ paths:
         '404':
           $ref: '#/components/responses/404NotFoundError'
 
+  /patients/{patientId}/consents:
+    get:
+      summary: Get Patient Effective Consent and Audit Trail
+      description: Returns active consent state across all 5 purposes and chronological audit trail.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      responses:
+        '200':
+          description: Effective consent status and audit trail
+        '404':
+          $ref: '#/components/responses/404NotFoundError'
+    post:
+      summary: Record Versioned Consent Decision
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                purpose:
+                  type: string
+                  enum: [MICROPHONE, LIVE_TRANSCRIPTION, AI_PROCESSING, AUDIO_RETENTION, CLINICIAN_SHARING]
+                decision:
+                  type: string
+                  enum: [GRANTED, WITHDRAWN]
+                noticeVersion:
+                  type: string
+                notes:
+                  type: string
+      responses:
+        '201':
+          description: Consent decision recorded
+
+  /patients/{patientId}/consents/withdraw:
+    post:
+      summary: Withdraw Specific or All Patient Consents
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                purposes:
+                  type: array
+                  items:
+                    type: string
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Consent withdrawal processed
+
+  /patients/{patientId}/export:
+    get:
+      summary: Data Subject Access Request (DSAR) Patient Data Export
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      responses:
+        '200':
+          description: Complete HIPAA/GDPR data export bundle
+
+  /patients/{patientId}/anonymize:
+    post:
+      summary: Right to Erasure / Patient Anonymization Workflow
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmation]
+              properties:
+                reason:
+                  type: string
+                confirmation:
+                  type: boolean
+      responses:
+        '200':
+          description: Patient demographics masked and all consents revoked
+
   /checkins/{patientId}:
     get:
       summary: List Patient Daily Voice Check-ins
