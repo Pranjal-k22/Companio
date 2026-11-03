@@ -68,8 +68,8 @@ export async function notifyClinicianForRedFlag(flagDoc) {
   const enableSMS = process.env.ENABLE_SMS_ESCALATION === 'true';
   const twilioSid = process.env.TWILIO_ACCOUNT_SID;
   const twilioToken = process.env.TWILIO_AUTH_TOKEN;
-  const twilioFrom = process.env.TWILIO_FROM_NUMBER;
-  const recipientPhone = clinician?.contact?.phone || process.env.CLINICIAN_NOTIFICATION_PHONE || '+15550192834';
+  const twilioFrom = process.env.TWILIO_FROM_NUMBER || process.env.TWILIO_PHONE_NUMBER;
+  const recipientPhone = clinician?.contact?.phone || process.env.CLINICIAN_PHONE_NUMBER || process.env.CLINICIAN_NOTIFICATION_PHONE || '+15550192834';
 
   if (enableSMS && twilioSid && twilioToken && twilioFrom) {
     const smsMessageBody = `🚨 COMPANIO RED ALERT
