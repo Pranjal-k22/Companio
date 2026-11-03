@@ -130,6 +130,47 @@ export default function PatientDetail() {
     }
   };
 
+  const handleAcknowledge = async (flagId) => {
+    setFlags((prev) =>
+      prev.map((f) => (f._id === flagId ? { ...f, status: 'acknowledged', acknowledgedAt: new Date() } : f))
+    );
+    try {
+      await API.post(`/flags/${flagId}/acknowledge`, {});
+    } catch (err) {
+      console.error('Error acknowledging flag:', err);
+      fetchPatientData();
+    }
+  };
+
+  const handleResolve = async (flagId) => {
+    const reason = window.prompt('Enter clinical resolution rationale:', 'Patient evaluated; symptoms managed or treatment adjusted');
+    if (!reason) return;
+    setFlags((prev) =>
+      prev.map((f) => (f._id === flagId ? { ...f, status: 'resolved', resolutionReason: reason, resolvedAt: new Date() } : f))
+    );
+    try {
+      await API.post(`/flags/${flagId}/resolve`, { resolutionReason: reason });
+    } catch (err) {
+      console.error('Error resolving flag:', err);
+      alert(err?.response?.data?.message || 'Failed to resolve flag');
+      fetchPatientData();
+    }
+  };
+
+  const handleAddNote = async (flagId) => {
+    const note = window.prompt('Enter clinician review note:');
+    if (!note) return;
+    try {
+      const res = await API.post(`/flags/${flagId}/notes`, { note });
+      if (res.data?.success) {
+        fetchPatientData();
+      }
+    } catch (err) {
+      console.error('Error adding note:', err);
+      alert(err?.response?.data?.message || 'Failed to add note');
+    }
+  };
+
   // Toggle follow-up checklist state
   const toggleFollowUp = (index) => {
     setCompletedFollowUps((prev) => ({
@@ -372,21 +413,56 @@ export default function PatientDetail() {
                           "{flag.sourceText}"
                         </p>
                       )}
+                      {flag.reviewNotes && flag.reviewNotes.length > 0 && (
+                        <div className="space-y-1 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 text-xs text-slate-300">
+                          <strong className="text-[11px] uppercase tracking-wider text-slate-400">Review Notes:</strong>
+                          {flag.reviewNotes.map((n, idx) => (
+                            <p key={idx} className="pl-2 border-l-2 border-teal-500">
+                              <span className="font-semibold text-teal-400">{n.clinicianName || 'Clinician'}:</span> {n.note}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      {flag.resolutionReason && (
+                        <p className="text-xs text-emerald-400 bg-emerald-950/30 p-2 rounded-lg border border-emerald-800/40">
+                          <strong>Resolved:</strong> {flag.resolutionReason}
+                        </p>
+                      )}
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="flex items-center gap-2 self-end md:self-center">
+                    <div className="flex flex-wrap items-center gap-2 self-end md:self-center">
+                      {!flag.acknowledgedAt && flag.status !== 'resolved' && (
+                        <button
+                          onClick={() => handleAcknowledge(flag._id)}
+                          className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 transition flex items-center gap-1"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Acknowledge
+                        </button>
+                      )}
+
                       <button
-                        onClick={() => handleUpdateFlagStatus(flag._id, 'reviewed')}
-                        disabled={flag.status === 'reviewed'}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-xl border flex items-center gap-1 transition ${
-                          flag.status === 'reviewed'
-                            ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
-                            : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500'
-                        }`}
+                        onClick={() => handleAddNote(flag._id)}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1"
                       >
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Reviewed
+                        <FileText className="w-3.5 h-3.5" /> Add Note
                       </button>
+
+                      {flag.status !== 'resolved' ? (
+                        <button
+                          onClick={() => handleResolve(flag._id)}
+                          className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Resolve
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleUpdateFlagStatus(flag._id, 'reopened')}
+                          className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                        >
+                          Reopen
+                        </button>
+                      )}
 
                       <button
                         onClick={() => handleUpdateFlagStatus(flag._id, 'escalated')}
@@ -425,7 +501,7 @@ export default function PatientDetail() {
                 <div
                   key={flag._id}
                   className={`p-5 rounded-2xl border transition-all ${
-                    flag.status === 'reviewed'
+                    flag.status === 'reviewed' || flag.status === 'resolved'
                       ? 'bg-slate-900/40 border-slate-800 opacity-60'
                       : 'bg-amber-950/20 border-amber-500/60'
                   }`}
@@ -447,20 +523,55 @@ export default function PatientDetail() {
                       {flag.sourceText && (
                         <p className="text-xs text-slate-400 italic">"{flag.sourceText}"</p>
                       )}
+                      {flag.reviewNotes && flag.reviewNotes.length > 0 && (
+                        <div className="space-y-1 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 text-xs text-slate-300">
+                          <strong className="text-[11px] uppercase tracking-wider text-slate-400">Review Notes:</strong>
+                          {flag.reviewNotes.map((n, idx) => (
+                            <p key={idx} className="pl-2 border-l-2 border-teal-500">
+                              <span className="font-semibold text-teal-400">{n.clinicianName || 'Clinician'}:</span> {n.note}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      {flag.resolutionReason && (
+                        <p className="text-xs text-emerald-400 bg-emerald-950/30 p-2 rounded-lg border border-emerald-800/40">
+                          <strong>Resolved:</strong> {flag.resolutionReason}
+                        </p>
+                      )}
                     </div>
 
-                    <div className="flex items-center gap-2 self-end md:self-center">
+                    <div className="flex flex-wrap items-center gap-2 self-end md:self-center">
+                      {!flag.acknowledgedAt && flag.status !== 'resolved' && (
+                        <button
+                          onClick={() => handleAcknowledge(flag._id)}
+                          className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 transition flex items-center gap-1"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Acknowledge
+                        </button>
+                      )}
+
                       <button
-                        onClick={() => handleUpdateFlagStatus(flag._id, 'reviewed')}
-                        disabled={flag.status === 'reviewed'}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-xl border transition ${
-                          flag.status === 'reviewed'
-                            ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
-                            : 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold border-amber-400'
-                        }`}
+                        onClick={() => handleAddNote(flag._id)}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1"
                       >
-                        Mark Reviewed
+                        <FileText className="w-3.5 h-3.5" /> Add Note
                       </button>
+
+                      {flag.status !== 'resolved' ? (
+                        <button
+                          onClick={() => handleResolve(flag._id)}
+                          className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Resolve
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleUpdateFlagStatus(flag._id, 'reopened')}
+                          className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                        >
+                          Reopen
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

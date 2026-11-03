@@ -1,5 +1,16 @@
 import mongoose from 'mongoose';
 
+export const ESCALATION_STATUSES = [
+  'QUEUED',
+  'ACCEPTED',
+  'SENT',
+  'DELIVERED',
+  'FAILED',
+  'RETRY_PENDING',
+  'ACKNOWLEDGED',
+  'PENDING', // Legacy support
+];
+
 const escalationEventSchema = new mongoose.Schema(
   {
     flagId: {
@@ -14,6 +25,11 @@ const escalationEventSchema = new mongoose.Schema(
       required: [true, 'Patient ID is required for escalation event'],
       index: true,
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      index: true,
+    },
     clinicianId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -21,38 +37,64 @@ const escalationEventSchema = new mongoose.Schema(
     },
     channel: {
       type: String,
-      enum: ['EMAIL', 'SMS'],
+      enum: ['EMAIL', 'SMS', 'WEBHOOK'],
       default: 'EMAIL',
+      index: true,
+    },
+    recipient: {
+      type: String,
+      trim: true,
     },
     status: {
       type: String,
-      enum: ['PENDING', 'SENT', 'FAILED'],
-      default: 'PENDING',
+      enum: ESCALATION_STATUSES,
+      default: 'QUEUED',
       index: true,
+    },
+    tier: {
+      type: Number,
+      default: 1, // Tier 1: Primary Clinician, Tier 2: On-Call / Supervisor
     },
     attempts: {
       type: Number,
       default: 0,
     },
+    maxAttempts: {
+      type: Number,
+      default: 3,
+    },
+    nextRetryAt: {
+      type: Date,
+      index: true,
+    },
     providerMessageId: {
       type: String,
       trim: true,
+      index: true,
+    },
+    providerResponse: {
+      type: mongoose.Schema.Types.Mixed,
     },
     error: {
       type: String,
       trim: true,
     },
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
     sentAt: {
       type: Date,
     },
-    organizationId: {
+    deliveredAt: {
+      type: Date,
+    },
+    acknowledgedAt: {
+      type: Date,
+    },
+    acknowledgedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Organization',
-      index: true,
+      ref: 'User',
+    },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
     },
   },
   {
@@ -61,7 +103,8 @@ const escalationEventSchema = new mongoose.Schema(
 );
 
 escalationEventSchema.index({ flagId: 1, status: 1 });
-escalationEventSchema.index({ organizationId: 1, flagId: 1 });
+escalationEventSchema.index({ organizationId: 1, status: 1, nextRetryAt: 1 });
+escalationEventSchema.index({ status: 1, nextRetryAt: 1 });
 
 export const EscalationEvent = mongoose.model('EscalationEvent', escalationEventSchema);
 export default EscalationEvent;

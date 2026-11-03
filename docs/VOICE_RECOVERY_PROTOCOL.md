@@ -70,3 +70,4 @@ A resume request is strictly rejected if:
 - The patient ID does not match (`Cross-patient rejected`).
 - The patient's consent for `LIVE_TRANSCRIPTION` or `AI_PROCESSING` was revoked while disconnected.
 - The patient's organization membership has been suspended or terminated.
+

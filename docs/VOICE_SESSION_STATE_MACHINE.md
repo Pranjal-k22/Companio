@@ -106,3 +106,4 @@ Every state change must invoke `transition(targetState, options)`.
    - `turnId` correlation
    - `reason` & caller metadata
    - ISO 8601 UTC timestamp
+

@@ -3,7 +3,7 @@
 **Document Reference**: `docs/IMPLEMENTATION_ROADMAP.md`  
 **Target Architecture**: Modular Monolith + Dedicated Voice Gateway + Distributed Worker  
 **Product**: AI Voice-First Health & Wellness Platform for Adults 55+  
-**Current Phase**: Phase 3 Complete (Awaiting Phase 4 Authorization)  
+**Current Phase**: Phase 5 Complete (Awaiting Phase 6 Authorization)  
 **Execution Philosophy**: Small verified increments; zero disruption to working code; preserve existing route compatibility.
 
 ---
@@ -11,9 +11,9 @@
 ## Roadmap Overview
 
 ```
-Phase 0 [DONE] ──► Phase 1 [DONE] ──► Phase 2 [DONE] ──► Phase 3 [DONE] ──► Phase 4 [NEXT] ──► Phase 5
-Baseline Audit     API & v1           Tenancy & Auth     Consent &          Voice Hard-        Convers-
-                   Foundations                           Privacy            ening              ation Plan
+Phase 0 [DONE] ──► Phase 1 [DONE] ──► Phase 2 [DONE] ──► Phase 3 [DONE] ──► Phase 4 [DONE] ──► Phase 5 [DONE] ──► Phase 6 [NEXT]
+Baseline Audit     API & v1           Tenancy & Auth     Consent &          Voice Hard-        Safety Net &       Dialogue &
+                   Foundations                           Privacy            ening              Escalation         Observations
 ```
 
 ---
@@ -105,19 +105,27 @@ Baseline Audit     API & v1           Tenancy & Auth     Consent &          Voic
 
 ---
 
-## Phase 5: Conversation Plan & Check-in Data Quality
-* **Goal**: Implement a structured clinical dialogue manager that guides older adults through wellness topics one short question at a time and presents a final read-back before committing data.
-* **Key Tasks**:
-  1. Define finite clinical dialogue plan: Medication Adherence ➔ Symptoms & Discomfort ➔ Sleep & Rest ➔ Hydration & Nutrition ➔ Physical Activity ➔ Open Concerns.
-  2. Implement confirmation loop: agent repeats ambiguous or critical medication/symptom statements and asks for verbal confirmation.
-  3. Provide `confirm_checkin_summary` tool where the agent summarizes recorded observations before the session is finalized.
-  4. Persist structured `Observation` records with explicit codes, numeric values, units, and source attribution (`patient-reported`).
-* **Exit Criteria**: Check-in data is only marked confirmed after patient explicitly affirms the read-back summary.
+## Phase 5: Clinical Safety Net, Risk Engine & Escalation Orchestration (Status: ✅ COMPLETED)
+* **Goal**: Harden existing clinical safety into an independently operating, deterministic, auditable risk detection and escalation engine with zero single point of failure on generative AI.
+* **Deliverables**:
+  - Versioned Clinical Safety Rule Registry (`server/src/models/SafetyRule.js`, `server/src/services/safety/safetyRuleRegistry.js`, `server/src/services/safety/safetyRuleEngine.js`) pre-seeded with 13 RED and 10 YELLOW governed rules
+  - Linguistic Context Analyzer (`server/src/services/safety/contextAnalyzer.js`): Multi-clause boundary isolation ("no headache, but severe chest pain"), direct negation, historical vs acute temporality, third-party attribution, hypothetical questions, transcript self-correction
+  - Canonical Risk Normalizer (`server/src/services/safety/riskNormalizer.js`): Strict severity enforcement preventing AI downgrades of RED taxonomy
+  - Atomic Flag Deduplicator (`server/src/services/safety/flagDeduplicator.js`): Merges parallel keyword and LLM signals (`sources: ['keyword_safety_net', 'llm_tool']`) without duplicate insertions
+  - Governed Patient Safety Guidance (`server/src/services/safety/patientSafetyResponse.js`): Immediate 911 / 988 emergency guidance, FAST stroke warning, strict prohibition of diagnostic claims
+  - Durable Escalation Outbox (`server/src/models/EscalationEvent.js`, `server/src/services/escalation/escalationDispatcher.js`): Decoupled delivery staging in `QUEUED` status, resilient against provider 429/500 errors
+  - Exponential Backoff & Jitter (`calculateRetryDelay` in `escalationPolicyEngine.js`): Sane retry pacing preventing thundering herd storms
+  - Escalation Retry Worker (`server/src/services/escalation/escalationRetryWorker.js`): Background retry worker processing pending outbox events
+  - SLA Monitor & Tier-2 Supervisor Escalation (`server/src/jobs/escalationMonitorWorker.js`): 15-minute unacknowledged RED alert breach detection and automatic Tier-2 supervisor escalation
+  - Triage API Endpoints & RBAC (`server/src/routes/flags.js`): `/flags/triage`, `/:flagId/acknowledge`, `assign`, `notes`, `escalate`, `resolve` (patients strictly forbidden from resolving flags)
+  - Clinician Console Enhancements: `ClinicianDashboard.jsx` (Clinical Triage Queue tab with SLA timers and one-click Acknowledge) and `PatientDetail.jsx` (Acknowledge, Add Note, Resolve with clinical rationale)
+  - Automated Verification: `server/src/tests/safety/testSafetyIntegration.js` (162/162 checks passing across 9 dedicated test suites)
+  - Specifications: `docs/CLINICAL_SAFETY_ARCHITECTURE.md`, `docs/SAFETY_RULE_TAXONOMY.md`, `docs/FLAG_LIFECYCLE.md`, `docs/ESCALATION_POLICY.md`, `docs/NOTIFICATION_DELIVERY.md`, `docs/CLINICAL_SAFETY_TESTING.md`, `docs/PHASE_5_COMPLETION_REPORT.md`
+* **Exit Criteria**: 100% of Phase 5 automated checks passing (162/162); 100% voice regression checks passing (40/40); client production build successful; zero regressions. (Met on 2026-11-03)
 
 ---
 
-## Phase 6: Clinical Safety & Escalation Outbox
-* **Goal**: Decouple safety rules into a versioned catalogue, store escalation notifications in a durable transactional outbox, and implement clinician delivery reconciliation.
+## Phase 6: Clinical Dialogue Manager & Observation Quality (Status: ⏳ NEXT)
 * **Key Tasks**:
   1. Extract `keywordSafetyNet.js` patterns into a versioned clinical rules package (`server/src/rules/v1/clinicalSafetyRules.json`).
   2. Create `EscalationOutbox` collection to record pending SMS/Email dispatches before network transmission.

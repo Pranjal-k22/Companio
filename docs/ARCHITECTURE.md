@@ -1,7 +1,7 @@
 # 🏛️ Companio — System Architecture & Engineering Blueprint
 
 **Document Reference**: `docs/ARCHITECTURE.md`  
-**Current Milestone**: Phase 2 (Organizations, Multi-Tenancy & Advanced Authorization)  
+**Current Milestone**: Phase 5 (Clinical Safety Net, Risk Engine & Escalation Orchestration)  
 **Repository Baseline**: `main`
 
 ---
@@ -220,4 +220,46 @@ Prior to starting a speech session on `/voice`:
 - **Data Export (DSAR)**: `GET /api/v1/patients/:id/export` produces a consolidated HIPAA/GDPR data bundle.
 - **Right to Erasure**: `POST /api/v1/patients/:id/anonymize` redacts demographics and automatically revokes all consent grants.
 - **Deep Log Redaction**: Pattern-based regular expressions sanitize phone numbers, emails, SSNs, tokens, and transcripts in application logs.
+
+---
+
+## 10. Voice Gateway Hardening & Audio Protocol (Phase 4)
+
+### 10.1 Finite State Machine (13 Controlled States)
+- Implements strict state machine transitions across 13 lifecycle states with transition auditing and terminal locks.
+- Sequence validation with monotonic chunk indexing and cumulative contiguous acknowledgements.
+
+### 10.2 Dual-Layer Barge-In Interruption
+- Client-side Web Audio cutoff paired with server-side LLM and TTS `AbortController` cancellation.
+- Stale responses from interrupted turns are discarded to maintain conversational coherence.
+
+### 10.3 5-Minute Session Recovery
+- Single-use 32-byte cryptographic resume tokens allow seamless recovery from mobile network drops.
+
+---
+
+## 11. Clinical Safety Net & Escalation Orchestration (Phase 5)
+
+### 11.1 Dual-Channel Parallel Safety Detection
+- Real-time speech transcript segments are parsed simultaneously by a local, zero-network-latency **Safety Rule Engine** and the conversational LLM.
+- **Independence Guarantee**: Emergency concerns are detected and escalated even during Gemini downtime or rate limits.
+
+### 11.2 Linguistic Context Analysis
+- Multi-clause segmentation isolates adversative coordinate clauses ("no headache, but severe chest pain").
+- Context analyzer verifies direct negation, historical vs acute onset, third-party attribution ("my brother had a stroke"), and transcript self-corrections.
+
+### 11.3 Strict Canonical Taxonomy & Risk Normalization
+- Enforces 13 RED high-acuity categories and 10 YELLOW sub-acute categories.
+- Pre-seeded with 23 evidence-based clinical rules with versioning and audit trails.
+- High-acuity RED conditions cannot be downgraded to sub-acute by external AI models.
+
+### 11.4 Durable Escalation Outbox & Provider Resilience
+- Alert dispatches are staged in MongoDB as `EscalationEvent` records in `QUEUED` status before calling Twilio (SMS) or Resend (Email).
+- Transient provider errors trigger exponential backoff with jitter.
+- External carrier failure never rolls back the clinician triage flag in the Companio database.
+
+### 11.5 SLA Monitoring & Tier-2 Supervisor Escalation
+- 15-minute acknowledgement SLA on RED flags.
+- Background worker `escalationMonitorWorker` automatically escalates breached flags to Tier 2 on-call clinical supervisors.
+
 

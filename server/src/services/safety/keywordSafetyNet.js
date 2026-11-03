@@ -1,9 +1,12 @@
 import { Flag } from '../../models/index.js';
 import notifyClinicianForRedFlag from '../escalation/notifyClinician.js';
+import { safetyRuleEngine } from './safetyRuleEngine.js';
+import { segmentIntoClauses, analyzeClauseContext, normalizeText } from './contextAnalyzer.js';
+import { RiskNormalizer } from './riskNormalizer.js';
+import { FlagDeduplicator } from './flagDeduplicator.js';
 
 /**
- * High-Stakes RED Flag Keyword & Pattern Rules Specification
- * Case-insensitive phrase matchers tolerant of minor speech variations.
+ * Backward-compatible export of RED flag patterns
  */
 export const RED_FLAG_KEYWORD_PATTERNS = [
   {
@@ -37,101 +40,160 @@ export const RED_FLAG_KEYWORD_PATTERNS = [
 ];
 
 /**
- * Evaluates transcript text against deterministic RED flag keyword patterns.
+ * Evaluates transcript text against deterministic safety rules with context & negation filtering.
  * 
  * @param {string} transcriptText - Recognized transcript text
- * @returns {Array<{ category: string, matchedPhrase: string }>} Array of detected red flag matches
+ * @param {object} [options] - Options including organizationId and enableContextAnalysis
+ * @returns {Array<{ category: string, matchedPhrase: string, severity: string, context: object }>}
  */
-export function checkTranscriptForRedFlags(transcriptText) {
+export function checkTranscriptForRedFlags(transcriptText, options = {}) {
   if (!transcriptText || typeof transcriptText !== 'string') return [];
 
-  const textLower = transcriptText.toLowerCase();
-  const matches = [];
+  const { organizationId = null, enableContextAnalysis = true } = options;
+  const rawMatches = safetyRuleEngine.evaluateText(transcriptText, organizationId);
+  if (rawMatches.length === 0) return [];
 
-  for (const pattern of RED_FLAG_KEYWORD_PATTERNS) {
-    for (const phrase of pattern.phrases) {
-      if (textLower.includes(phrase)) {
-        matches.push({
-          category: pattern.category,
-          matchedPhrase: phrase,
-        });
-        break; // Match once per category
+  const clauses = segmentIntoClauses(transcriptText);
+  const evaluatedDetections = [];
+  const seenCategories = new Set();
+
+  for (const match of rawMatches) {
+    if (seenCategories.has(match.category)) continue;
+
+    const pattern = match.matchedPattern.toLowerCase();
+
+    // Find the specific clause containing this pattern
+    let relevantClause = transcriptText;
+    for (const c of clauses) {
+      if (c.toLowerCase().includes(pattern)) {
+        relevantClause = c;
+        break;
       }
+    }
+
+    let context = { isActiveConcern: true, classification: 'ACTIVE_CONCERN' };
+    if (enableContextAnalysis) {
+      context = analyzeClauseContext(relevantClause, pattern);
+    }
+
+    if (context.isActiveConcern) {
+      seenCategories.add(match.category);
+      evaluatedDetections.push({
+        category: match.category,
+        matchedPhrase: match.matchedPattern,
+        severity: match.severity,
+        ruleId: match.ruleId,
+        ruleVersion: match.ruleVersion,
+        context,
+        clause: relevantClause,
+      });
     }
   }
 
-  return matches;
+  return evaluatedDetections;
+}
+
+/**
+ * Evaluates full contextual profile of a statement (including non-active/negated/historical mentions)
+ */
+export function analyzeTranscriptSafetyProfile(transcriptText, options = {}) {
+  if (!transcriptText || typeof transcriptText !== 'string') return [];
+
+  const { organizationId = null } = options;
+  const rawMatches = safetyRuleEngine.evaluateText(transcriptText, organizationId);
+  const clauses = segmentIntoClauses(transcriptText);
+  const profile = [];
+
+  for (const match of rawMatches) {
+    const pattern = match.matchedPattern.toLowerCase();
+    let relevantClause = transcriptText;
+    for (const c of clauses) {
+      if (c.toLowerCase().includes(pattern)) {
+        relevantClause = c;
+        break;
+      }
+    }
+
+    const context = analyzeClauseContext(relevantClause, pattern);
+    profile.push({
+      category: match.category,
+      severity: match.severity,
+      ruleId: match.ruleId,
+      matchedPhrase: match.matchedPattern,
+      clause: relevantClause,
+      context,
+    });
+  }
+
+  return profile;
 }
 
 /**
  * Runs the deterministic safety net check in parallel with LLM processing.
- * Deduplicates against existing flags logged for the same conversation and category.
+ * Normalizes signals and atomically deduplicates against existing flags.
  * 
  * @param {string} transcriptText - Final transcript string
- * @param {object} sessionContext - Session context containing patientId and conversationId
- * @returns {Promise<Array<object>>} Created safety net Flag documents
+ * @param {object} sessionContext - Session context containing patientId, organizationId, conversationId, turnId
+ * @returns {Promise<Array<object>>} Created or merged safety net Flag documents
  */
-export async function runSafetyNetCheck(transcriptText, sessionContext) {
-  const { patientId, conversationId } = sessionContext;
-  const matches = checkTranscriptForRedFlags(transcriptText);
+export async function runSafetyNetCheck(transcriptText, sessionContext = {}) {
+  const { patientId, conversationId, organizationId } = sessionContext;
+  const activeDetections = checkTranscriptForRedFlags(transcriptText, { organizationId });
 
-  if (matches.length === 0) return [];
+  if (activeDetections.length === 0) return [];
 
   const createdFlags = [];
 
-  for (const match of matches) {
-    // Atomic Deduplication: check if a flag for this (conversationId, category) already exists
-    const existingFlag = await Flag.findOne({ conversationId, category: match.category });
-    if (existingFlag) {
-      console.log(`[Safety Net Deduplicated] Flag for '${match.category}' already logged by LLM for Conversation ${conversationId}.`);
-      continue;
-    }
-
+  for (const detection of activeDetections) {
     console.warn(
-      `🚨 [SAFETY NET INTERVENTION] Deterministic safety net caught RED flag '${match.category}' (Matched phrase: "${match.matchedPhrase}") for Conversation ${conversationId}!`
+      `🚨 [SAFETY NET INTERVENTION] Deterministic safety net caught ${detection.severity.toUpperCase()} flag '${detection.category}' (Matched phrase: "${detection.matchedPhrase}") for Conversation ${conversationId}!`
     );
 
     try {
-      // Use atomic upsert to guarantee no duplicate flag is created if LLM tool call executes simultaneously
-      const flag = await Flag.findOneAndUpdate(
-        { conversationId, category: match.category },
-        {
-          $setOnInsert: {
-            patientId,
-            conversationId,
-            severity: 'red',
-            category: match.category,
-            description: `[Safety Net Emergency Match] Recognized red flag phrase: "${match.matchedPhrase}" in transcript.`,
-            sourceText: transcriptText,
-            ruleId: `SAFETY_NET_KW_${match.category.toUpperCase()}`,
-            source: 'keyword_safety_net',
-            status: 'escalated',
-            escalatedAt: new Date(),
-          },
-        },
-        { upsert: true, new: true, rawResult: true }
-      );
+      const normalizedSignal = RiskNormalizer.normalizeSignal({
+        source: 'keyword_safety_net',
+        category: detection.category,
+        severity: detection.severity,
+        evidenceText: `[Safety Net Emergency Match] Recognized phrase: "${detection.matchedPhrase}" in: "${detection.clause}".`,
+        matchedPattern: detection.matchedPhrase,
+        ruleId: detection.ruleId,
+        ruleVersion: detection.ruleVersion,
+        sessionContext,
+        contextAnalysis: detection.context,
+      });
 
-      const targetDoc = flag.value || flag;
-      // If updatedExisting is true, LLM inserted it right at the same moment -> deduplicated
-      if (flag.lastErrorObject?.updatedExisting) {
-        console.log(`[Safety Net Atomic Deduplicated] Flag for '${match.category}' was concurrently logged by LLM.`);
-      } else if (targetDoc && targetDoc._id) {
-        createdFlags.push(targetDoc);
-        if (targetDoc.severity === 'red' || targetDoc.severity === 'RED') {
+      const { flag, isNew, isMerged } = await FlagDeduplicator.deduplicateAndPersist(normalizedSignal);
+
+      if (flag) {
+        createdFlags.push(flag);
+
+        // If newly created RED flag (not already escalated), trigger notification
+        if (isNew && flag.severity === 'red') {
           try {
-            await notifyClinicianForRedFlag(targetDoc);
+            await notifyClinicianForRedFlag(flag);
           } catch (e) {
             console.warn('[Safety Net Escalation Warning]:', e.message);
           }
         }
       }
     } catch (err) {
-      console.error('[Safety Net Error] Flag upsert failed:', err.message);
+      console.error('[Safety Net Error] Flag processing failed:', err.message);
     }
   }
 
   return createdFlags;
 }
+
+export const keywordSafetyNet = {
+  checkTranscriptForRedFlags,
+  runSafetyNetCheck,
+  evaluateUtterance: (text, options = {}) => {
+    const concerns = checkTranscriptForRedFlags(text, options);
+    return {
+      hasConcerns: concerns.length > 0,
+      concerns,
+    };
+  },
+};
 
 export default checkTranscriptForRedFlags;

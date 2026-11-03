@@ -5,6 +5,31 @@ All notable changes to the Companio healthcare platform will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-11-03
+
+### Added
+- **Deterministic Safety Rule Engine**: Local pattern-matching engine with 13 RED and 10 YELLOW governed rules (`SafetyRule.js`, `safetyRuleRegistry.js`, `safetyRuleEngine.js`).
+- **Linguistic Context Analysis**: Multi-clause boundary isolation (`contextAnalyzer.js`), direct negation handling, historical vs acute temporality, third-party attribution, hypothetical questions, and transcript self-correction.
+- **Strict Canonical Risk Normalization**: Enforces canonical taxonomy and prevents AI downgrades of high-acuity RED conditions (`riskNormalizer.js`).
+- **Atomic Flag Deduplication**: Merges parallel signals from keyword safety net and LLM tool (`flagDeduplicator.js`) without duplicate records.
+- **Governed Patient Emergency Guidance**: Immediate non-diagnostic 911 / 988 crisis directives with jurisdiction emergency number resolution (`patientSafetyResponse.js`).
+- **Durable Escalation Outbox**: Staged notification delivery in `EscalationEvent` with exponential backoff and jitter (`escalationDispatcher.js`, `escalationRetryWorker.js`).
+- **SLA Monitoring & Auto-Escalation**: 15-minute SLA tracking on unacknowledged RED flags triggering automated Tier-2 supervisor escalation (`escalationMonitorWorker.js`).
+- **Triage API & RBAC Security**: Scoped `/flags/triage`, `/:flagId/acknowledge`, `assign`, `notes`, `escalate`, `resolve` routes (patients strictly forbidden from resolving flags).
+- **Clinician Dashboard Triage Queue**: Live triage queue tab with unacknowledged alert counters, SLA timers, and one-click Acknowledge.
+- **Phase 5 Master Test Suite**: Created 9 automated test suites (`testSafetyIntegration.js`) verifying 162/162 clinical safety and outbox checks.
+
+## [1.4.0] - 2026-11-03
+
+### Added
+- **Voice Session Finite State Machine**: 13 controlled lifecycle states with monotonic transitions and terminal locks (`voiceSessionStateMachine.js`).
+- **Monotonic Audio Sequencing**: Sequential PCM Int16 chunk ingestion with contiguous cumulative ACKs and backpressure limits (`audioChunkManager.js`).
+- **Dual-Layer Barge-In Interruption**: Synchronous client Web Audio cutoff paired with server-side LLM and TTS abort controller cancellation (`useBargeIn.js`).
+- **5-Minute Session Recovery**: 32-byte cryptographic single-use resume tokens allowing seamless reconnection from network drops (`sessionRecoveryManager.js`, `useVoiceRecovery.js`).
+- **Voice Resource & Concurrency Gates**: Strict limits enforcing 1 session per user, 25 per organization, and 8KB max frame size (`voiceResourceLimiter.js`).
+- **Zero Raw Audio Storage**: Telemetry collector with P50/P95/P99 latency tracking and zero audio disk retention (`voiceMetricsCollector.js`).
+- **Phase 4 Master Test Suite**: Created 8 automated test suites (`testVoiceIntegration.js`) verifying 40/40 real-time voice gateway checks.
+
 ## [1.3.0] - 2026-11-03
 
 ### Added

@@ -9,6 +9,7 @@
     "dev:client": "npm run dev --prefix client",
     "seed": "npm run seed --prefix server",
     "test:voice": "node server/src/tests/voice/testVoiceIntegration.js",
+    "test:safety": "node server/src/tests/safety/testSafetyIntegration.js",
     "install:all": "npm install && npm install --prefix server && npm install --prefix client",
     "build:client": "npm run build --prefix client"
   },

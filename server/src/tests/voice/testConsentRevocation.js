@@ -154,3 +154,4 @@ if (process.argv[1]?.endsWith('testConsentRevocation.js')) {
       process.exit(1);
     });
 }
+

@@ -422,6 +422,185 @@ paths:
         '200':
           description: Historical check-in records
 
+  /flags/triage:
+    get:
+      summary: Get Active Clinical Triage Queue
+      description: Returns active flags for the organization, sorted with RED flags first.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [red, yellow]
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: unacknowledgedOnly
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Triage flags array
+        '403':
+          $ref: '#/components/responses/403ForbiddenError'
+
+  /flags/{flagId}/acknowledge:
+    post:
+      summary: Acknowledge Clinical Alert
+      description: Halts the SLA breach countdown clock. Sets acknowledgedAt and clinician ID.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: flagId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      responses:
+        '200':
+          description: Flag acknowledged successfully
+
+  /flags/{flagId}/assign:
+    post:
+      summary: Assign Responsible Clinician to Flag
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: flagId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assignedTo]
+              properties:
+                assignedTo:
+                  type: string
+                  pattern: '^[0-9a-fA-F]{24}$'
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Clinician assigned to flag
+
+  /flags/{flagId}/notes:
+    post:
+      summary: Add Clinician Review Note
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: flagId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [note]
+              properties:
+                note:
+                  type: string
+      responses:
+        '200':
+          description: Review note added
+
+  /flags/{flagId}/escalate:
+    post:
+      summary: Manually Escalate Flag
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: flagId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Flag escalated
+
+  /flags/{flagId}/resolve:
+    post:
+      summary: Resolve Clinical Flag with Mandatory Rationale
+      description: Resolves the flag. Patients are strictly forbidden from calling this endpoint.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: flagId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resolutionReason]
+              properties:
+                resolutionReason:
+                  type: string
+                isFalsePositive:
+                  type: boolean
+                duplicateOf:
+                  type: string
+      responses:
+        '200':
+          description: Flag resolved
+
+  /flags/{flagId}/reopen:
+    post:
+      summary: Reopen Resolved Clinical Flag
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: flagId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Flag reopened
+
   /flags/patient/{patientId}:
     get:
       summary: List Clinical Triage Flags for Patient

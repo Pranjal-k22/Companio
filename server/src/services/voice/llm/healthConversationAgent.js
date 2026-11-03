@@ -1,5 +1,8 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Checkin, Flag, Conversation } from '../../../models/index.js';
+import { RiskNormalizer } from '../../safety/riskNormalizer.js';
+import { FlagDeduplicator } from '../../safety/flagDeduplicator.js';
+import notifyClinicianForRedFlag from '../../escalation/notifyClinician.js';
 
 // Exact Red / Yellow Flag Taxonomy Specification
 export const FLAG_TAXONOMY = {
@@ -180,20 +183,34 @@ export async function executeToolCall(toolName, args, sessionContext) {
         ? category
         : severity === 'red' ? 'severe_new_pain' : 'mild_new_symptom';
 
-      const flag = await Flag.create({
-        patientId,
-        conversationId,
-        severity: severity.toLowerCase(),
+      const normalizedSignal = RiskNormalizer.normalizeSignal({
+        source: 'llm_tool',
         category: validCategory,
-        description,
-        sourceText: sourceText || '',
+        severity: severity.toLowerCase(),
+        evidenceText: sourceText || description,
+        matchedPattern: sourceText || description,
         ruleId: `LLM_TOOL_${severity.toUpperCase()}_01`,
-        status: severity.toLowerCase() === 'red' ? 'escalated' : 'open',
-        escalatedAt: severity.toLowerCase() === 'red' ? new Date() : undefined,
+        sessionContext,
+        contextAnalysis: {
+          isHistorical: args.isHistorical || false,
+          isThirdParty: args.isThirdParty || false,
+          classification: args.isHistorical ? 'HISTORICAL' : (args.isThirdParty ? 'THIRD_PARTY' : 'ACTIVE_CONCERN'),
+        },
+        detectionConfidence: args.confidence || null,
       });
 
-      console.log(`[MongoDB Flag Created] ${severity.toUpperCase()} Flag (${flag._id}): ${description}`);
-      return { success: true, flagId: flag._id };
+      const { flag, isNew } = await FlagDeduplicator.deduplicateAndPersist(normalizedSignal);
+
+      if (flag && isNew && (flag.severity === 'red' || flag.severity === 'RED')) {
+        try {
+          await notifyClinicianForRedFlag(flag);
+        } catch (e) {
+          console.warn('[LLM Tool Escalation Warning]:', e.message);
+        }
+      }
+
+      console.log(`[MongoDB Flag Logged] ${severity.toUpperCase()} Flag (${flag?._id}): ${description}`);
+      return { success: true, flagId: flag?._id };
     }
 
     if (toolName === 'logCheckin') {

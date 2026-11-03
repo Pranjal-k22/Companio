@@ -66,3 +66,4 @@ The metrics collector emits structured performance statistics without persisting
 - **Maximum Audio Frame Size**: 8,192 bytes (enforces ~256ms audio ceiling).
 - **Session Inactivity Timeout**: 5 minutes of client silence triggers automatic close.
 - **Maximum Session Duration**: 30 minutes hard limit.
+

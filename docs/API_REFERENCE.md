@@ -231,3 +231,54 @@ Client                                     Server (/voice)
   │◄─── 'session-ended' ─────────────────────────│
 ```
 
+
+
+---
+
+## 6. Clinical Triage & Safety Flag Endpoints (`/api/v1/flags`)
+
+All endpoints require authentication and are scoped to the active organization tenant context.
+
+### 6.1 `GET /api/v1/flags/triage`
+- **Access**: Clinician / Admin
+- **Query Params**:
+  - `severity`: `'red'` | `'yellow'`
+  - `status`: filter by status (defaults to all active non-resolved flags)
+  - `unacknowledgedOnly`: `'true'` | `'false'`
+- **Returns**: Array of active clinical flags populated with patient name, age, contact, assigned clinician, and acknowledgement details.
+
+### 6.2 `POST /api/v1/flags/:flagId/acknowledge`
+- **Access**: Clinician / Admin
+- **Description**: Clinician acknowledges receipt of an alert. Halts the SLA breach countdown clock. Sets `acknowledgedAt: now`, `acknowledgedBy: userId`.
+
+### 6.3 `POST /api/v1/flags/:flagId/assign`
+- **Access**: Clinician / Admin
+- **Body**: `{ assignedTo: "<userId>", reason?: string }`
+- **Description**: Assigns responsible clinician to manage the flag. Automatically transitions status from `open` to `in_review`.
+
+### 6.4 `POST /api/v1/flags/:flagId/notes`
+- **Access**: Clinician / Admin
+- **Body**: `{ note: string }`
+- **Description**: Appends a timestamped review note with clinician identity to the flag's `reviewNotes` array.
+
+### 6.5 `POST /api/v1/flags/:flagId/escalate`
+- **Access**: Clinician / Admin
+- **Body**: `{ reason?: string }`
+- **Description**: Manually escalates a flag to supervisory tier, triggering immediate notification dispatch.
+
+### 6.6 `POST /api/v1/flags/:flagId/resolve`
+- **Access**: Clinician / Admin only (**Patients strictly prohibited with 403 Forbidden**)
+- **Body**:
+  - `resolutionReason`: string (Required clinical rationale)
+  - `isFalsePositive`: boolean (optional)
+  - `duplicateOf`: string ObjectId (optional)
+- **Description**: Marks the flag as `resolved`, `false_positive`, or `duplicate`. Records timestamp and clinician ID.
+
+### 6.7 `POST /api/v1/flags/:flagId/reopen`
+- **Access**: Clinician / Admin
+- **Body**: `{ reason: string }`
+- **Description**: Reopens a previously resolved flag upon patient symptom recurrence or deterioration.
+
+### 6.8 `GET /api/v1/flags/patient/:patientId`
+- **Access**: Clinician / Admin / Patient Self
+- **Description**: Retrieves all clinical flags associated with a specific patient, ordered newest first.

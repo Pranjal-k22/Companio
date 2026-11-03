@@ -47,3 +47,4 @@ During conversational barge-in or live consent revocation, the turn's `AbortCont
   - Phase 4: `voice:agent:audio` (`{ chunkSeq, turnId, audio, format, latencyMs }`)
   - Legacy: `agent-audio-chunk` (`{ audio, format, isFinal, latencyMs }`)
 - **Fallback Synthesizer**: Produces a synthetic 1,024-byte audio buffer when API credentials are absent.
+

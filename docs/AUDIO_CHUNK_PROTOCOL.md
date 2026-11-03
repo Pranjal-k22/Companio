@@ -59,3 +59,4 @@ Cumulative ACK:      ack: 2            ack: 2           ack: 4
 - **Buffer Ceiling**: `backpressureThreshold = 30` chunks.
 - If out-of-order frames exceed this threshold (indicating severe network degradation), excess frames are dropped and recorded in `metrics.audioFramesDropped`.
 - The server emits `voice:audio:ack` with `windowSize` informing the client of buffer status.
+

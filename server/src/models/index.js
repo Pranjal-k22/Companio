@@ -17,6 +17,7 @@ import ConsentRecord, {
   CONSENT_CHANNELS,
   CONSENT_ACTOR_ROLES,
 } from './ConsentRecord.js';
+import SafetyRule, { APPROVED_CATEGORIES, ALL_APPROVED_CATEGORIES } from './SafetyRule.js';
 
 export {
   User,
@@ -37,6 +38,9 @@ export {
   CONSENT_DECISIONS,
   CONSENT_CHANNELS,
   CONSENT_ACTOR_ROLES,
+  SafetyRule,
+  APPROVED_CATEGORIES,
+  ALL_APPROVED_CATEGORIES,
 };
 
 export default {
@@ -54,4 +58,5 @@ export default {
   Team,
   Invitation,
   ConsentRecord,
+  SafetyRule,
 };
