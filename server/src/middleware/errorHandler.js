@@ -8,9 +8,8 @@ import logger from '../utils/logger.js';
 export function normalizeError(err, req) {
   // 1. Zod Validation Errors
   if (err instanceof ZodError) {
-    const issues = err.issues || err.errors || [];
-    const fieldErrors = issues.map((e) => ({
-      field: (e.path || []).join('.'),
+    const fieldErrors = err.errors.map((e) => ({
+      field: e.path.join('.'),
       message: e.message,
     }));
     return new ValidationError('Request validation failed.', fieldErrors);
@@ -113,3 +112,4 @@ export function notFoundHandler(req, res, next) {
 }
 
 export default errorHandler;
+

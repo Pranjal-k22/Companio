@@ -48,3 +48,4 @@ export function sendSuccess(res, data, options = {}) {
 }
 
 export default sendSuccess;
+

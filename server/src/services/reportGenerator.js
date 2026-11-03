@@ -11,18 +11,21 @@ import { Checkin, Flag, Report, Patient } from '../models/index.js';
  * @returns {Promise<object>} Ground-truth trends object
  */
 export async function computeClinicalTrends(patientId, startDate, endDate) {
+  const patient = await Patient.findById(patientId);
+  const orgFilter = patient?.organizationId ? { organizationId: patient.organizationId } : {};
+
   const query = {
     patientId,
     timestamp: { $gte: startDate, $lte: endDate },
+    ...orgFilter,
   };
 
   const checkins = await Checkin.find(query).sort({ timestamp: 1 });
   const flags = await Flag.find({
     patientId,
     createdAt: { $gte: startDate, $lte: endDate },
+    ...orgFilter,
   }).sort({ createdAt: -1 });
-
-  const patient = await Patient.findById(patientId);
 
   const redFlags = flags.filter((f) => f.severity === 'red');
   const yellowFlags = flags.filter((f) => f.severity === 'yellow');
@@ -222,6 +225,7 @@ export function generateTemplateFallbackReport(patient, computedTrends, periodSt
 
   return {
     patientId: patient._id,
+    organizationId: patient.organizationId,
     periodStart,
     periodEnd,
     overview,
@@ -349,6 +353,7 @@ ${lastError ? `\n\nERROR IN PREVIOUS ATTEMPT: ${lastError}. Please correct the J
         // Schema validation passed -> construct report document
         const reportData = {
           patientId,
+          organizationId: patient?.organizationId,
           periodStart,
           periodEnd,
           overview: parsed.overview,

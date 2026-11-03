@@ -14,3 +14,4 @@ export const updateFlagStatusSchema = z.object({
     errorMap: () => ({ message: 'Status must be one of: open, reviewed, escalated, resolved' }),
   }),
 });
+

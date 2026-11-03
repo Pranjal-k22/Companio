@@ -1,9 +1,11 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { register, login, getMe, updateProfile } from '../controllers/authController.js';
+import { switchActiveOrganization } from '../controllers/organizationController.js';
 import { verifyToken } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validate.js';
 import { loginSchema, registerSchema, updateProfileSchema } from '../validators/auth.schemas.js';
+import { switchOrganizationSchema } from '../validators/organization.schemas.js';
 
 const router = express.Router();
 
@@ -31,5 +33,11 @@ router.post('/login', authLimiter, validateRequest({ body: loginSchema }), login
 // Protected routes
 router.get('/me', verifyToken, getMe);
 router.put('/profile', verifyToken, validateRequest({ body: updateProfileSchema }), updateProfile);
+router.post(
+  '/active-organization',
+  verifyToken,
+  validateRequest({ body: switchOrganizationSchema }),
+  switchActiveOrganization
+);
 
 export default router;

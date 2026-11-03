@@ -35,3 +35,4 @@ export function validateRequest(schemas = {}) {
 }
 
 export default validateRequest;
+

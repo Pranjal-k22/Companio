@@ -49,6 +49,11 @@ const escalationEventSchema = new mongoose.Schema(
     sentAt: {
       type: Date,
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -56,6 +61,7 @@ const escalationEventSchema = new mongoose.Schema(
 );
 
 escalationEventSchema.index({ flagId: 1, status: 1 });
+escalationEventSchema.index({ organizationId: 1, flagId: 1 });
 
 export const EscalationEvent = mongoose.model('EscalationEvent', escalationEventSchema);
 export default EscalationEvent;

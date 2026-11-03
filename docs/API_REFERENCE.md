@@ -25,12 +25,14 @@ The Companio API adheres to modern enterprise healthcare API conventions:
 | Header | Type | Description | Required |
 |---|---|---|---|
 | `Authorization` | `string` | `Bearer <JWT_TOKEN>` for protected endpoints | Yes (unless public) |
+| `X-Organization-Id` | `string` | Active organization ObjectId or slug routing context. Verified server-side against Membership. | Optional (defaults to active membership) |
 | `X-Request-Id` | `string` | Client-generated UUID v4 trace identifier. If omitted, server generates one automatically. | Optional |
 | `Content-Type` | `string` | `application/json` for write operations | Yes for POST/PUT/PATCH |
 
 ### Response Headers
 | Header | Description |
 |---|---|
+| `X-Organization-Id` | Verified tenant identifier associated with the request execution context. |
 | `X-Request-Id` | Echoed correlation UUID tracking the request across server logs and database operations. |
 | `Content-Type` | `application/json` or `application/problem+json` for RFC 9457 errors. |
 
@@ -112,8 +114,38 @@ The Companio API adheres to modern enterprise healthcare API conventions:
   - Returns current user context and role.
 - `PUT /api/v1/auth/profile` (Protected)
   - Updates profile metadata, accessibility preferences (`voiceSpeed`, `highContrastMode`), and emergency contacts.
+- `POST /api/v1/auth/active-organization` (Protected)
+  - Body: `{ organizationId: string }`
+  - Switches active organization context and validates membership.
 
-### 4.3 Patients
+### 4.3 Multi-Tenant Organizations & Governance
+- `GET /api/v1/organizations` (Protected)
+  - Lists organizations the authenticated user belongs to.
+- `POST /api/v1/organizations` (Protected)
+  - Body: `{ name: string, slug: string, legalName?: string, timezone?: string }`
+  - Registers new organization; creator assigned `ORG_OWNER`.
+- `GET /api/v1/organizations/:id` (Protected)
+  - Retrieves organization profile for active tenant.
+- `PATCH /api/v1/organizations/:id` (Protected: `organization:update`)
+  - Updates organization settings, escalation policies, or contact information.
+- `GET /api/v1/organizations/:id/members` (Protected: `members:read`)
+  - Lists clinician, staff, and patient memberships in active organization.
+- `POST /api/v1/organizations/:id/invitations` (Protected: `members:invite`)
+  - Body: `{ email: string, proposedRole: string }`
+  - Dispatches invitation token.
+- `POST /api/v1/organizations/invitations/accept` (Protected)
+  - Body: `{ token: string }`
+  - Accepts pending invitation and enrolls user in organization.
+- `PATCH /api/v1/organizations/:id/members/:memberId` (Protected: `members:manage_roles`)
+  - Updates member role or status.
+- `DELETE /api/v1/organizations/:id/members/:memberId` (Protected: `members:remove`)
+  - Revokes member access.
+- `GET /api/v1/organizations/:id/teams` (Protected: `teams:read`)
+  - Lists clinical care teams.
+- `POST /api/v1/organizations/:id/teams` (Protected: `teams:manage`)
+  - Creates clinical care team with assigned clinicians.
+
+### 4.4 Patients
 - `GET /api/v1/patients` (Protected: `CLINICIAN`, `ADMIN`)
   - Query: `page=1`, `limit=25`, `sort=-createdAt`, `search=Robert`
   - Returns: List of enrolled patient records with pagination metadata.
@@ -186,3 +218,4 @@ Client                                     Server (/voice)
   │──── 'end-session' ──────────────────────────►│ (Teardown STT, close convo)
   │◄─── 'session-ended' ─────────────────────────│
 ```
+

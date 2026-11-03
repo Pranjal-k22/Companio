@@ -55,11 +55,19 @@ const patientSchema = new mongoose.Schema(
       ref: 'User',
       index: true,
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      index: true,
+    },
   },
   {
     timestamps: true,
   }
 );
+
+patientSchema.index({ organizationId: 1, name: 1 });
+patientSchema.index({ organizationId: 1, assignedClinicianId: 1 });
 
 
 

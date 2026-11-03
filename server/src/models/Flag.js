@@ -68,15 +68,21 @@ const flagSchema = new mongoose.Schema(
     reviewedAt: {
       type: Date,
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      index: true,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// Compound index on (patientId, status)
+// Compound indexes
 flagSchema.index({ patientId: 1, status: 1 });
 flagSchema.index({ patientId: 1, severity: 1 });
+flagSchema.index({ organizationId: 1, patientId: 1, severity: 1, status: 1 });
 
 // Post-save hook to automatically trigger clinician escalation notification on RED flag creation
 flagSchema.post('save', async function (doc) {

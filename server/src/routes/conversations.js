@@ -1,5 +1,6 @@
 import express from 'express';
 import { verifyToken } from '../middleware/auth.js';
+import { tenantContext } from '../middleware/tenantContext.js';
 import { Conversation, Patient, Flag } from '../models/index.js';
 import { sendSuccess } from '../utils/response.js';
 import { NotFoundError, AuthorizationError } from '../errors/AppError.js';
@@ -10,18 +11,21 @@ const router = express.Router();
 
 /**
  * @route   GET /api/v1/conversations (or /api/conversations)
- * @desc    Get paginated voice check-in logs & transcripts with patient details and flags
+ * @desc    Get paginated voice check-in logs & transcripts with patient details and flags scoped to organization
  * @access  Private
  */
-router.get('/', verifyToken, async (req, res, next) => {
+router.get('/', verifyToken, tenantContext, async (req, res, next) => {
   try {
     const { patientId, search, limit = 50, page = 1 } = req.query;
 
-    const query = {};
+    const query = { organizationId: req.tenant.organizationObjectId };
 
     // Patient access restriction: patients can only view their own conversations
     if (req.user.role === 'PATIENT') {
-      const patient = await Patient.findOne({ userId: req.user.id });
+      const patient = await Patient.findOne({
+        userId: req.user.id,
+        organizationId: req.tenant.organizationObjectId,
+      });
       if (!patient) {
         return sendSuccess(res, [], {
           legacyKey: 'conversations',
@@ -58,7 +62,10 @@ router.get('/', verifyToken, async (req, res, next) => {
     // Enhance each conversation with associated flag data
     const enhancedConversations = await Promise.all(
       conversations.map(async (conv) => {
-        const flags = await Flag.find({ conversationId: conv._id })
+        const flags = await Flag.find({
+          conversationId: conv._id,
+          organizationId: req.tenant.organizationObjectId,
+        })
           .select('severity category description status')
           .lean();
 
@@ -99,28 +106,38 @@ router.get('/', verifyToken, async (req, res, next) => {
 router.get(
   '/:id',
   verifyToken,
+  tenantContext,
   validateRequest({ params: conversationIdParamSchema }),
   async (req, res, next) => {
     try {
       const { id } = req.params;
 
-      const conversation = await Conversation.findById(id)
+      const conversation = await Conversation.findOne({
+        _id: id,
+        organizationId: req.tenant.organizationObjectId,
+      })
         .populate('patientId', 'name age contact emergencyContact')
         .lean();
 
       if (!conversation) {
-        throw new NotFoundError('Conversation record not found.');
+        throw new NotFoundError('Conversation record not found in this organization.');
       }
 
       // Role verification: patients can only view their own
       if (req.user.role === 'PATIENT') {
-        const patient = await Patient.findOne({ userId: req.user.id });
+        const patient = await Patient.findOne({
+          userId: req.user.id,
+          organizationId: req.tenant.organizationObjectId,
+        });
         if (!patient || conversation.patientId._id.toString() !== patient._id.toString()) {
           throw new AuthorizationError('Access denied.');
         }
       }
 
-      const flags = await Flag.find({ conversationId: conversation._id }).lean();
+      const flags = await Flag.find({
+        conversationId: conversation._id,
+        organizationId: req.tenant.organizationObjectId,
+      }).lean();
 
       return sendSuccess(res, {
         conversation: {

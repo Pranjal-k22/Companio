@@ -44,25 +44,45 @@ export const initVoiceSocket = (io) => {
     socket.on('start-session', async (data = {}) => {
       try {
         const patientId = user?.patientId || data.patientId;
-        
+        const orgId = socket.tenant?.organizationObjectId;
+
         if (!patientId && user?.role === 'PATIENT') {
           return socket.emit('voice:error', { message: 'No patient record linked to account.' });
         }
 
-        // Create Mongoose Conversation record
+        // Verify patient belongs to the same organization if patientId provided
+        if (patientId && orgId) {
+          const patientExists = await Patient.findOne({
+            _id: patientId,
+            organizationId: orgId,
+          });
+          if (!patientExists) {
+            console.warn(`[Voice Socket Security] Blocked session start: Patient ${patientId} does not belong to Org ${orgId}`);
+            return socket.emit('voice:error', { message: 'Unauthorized: Patient does not belong to your organization.' });
+          }
+        }
+
+        // Create Mongoose Conversation record with tenant scope
         const conversation = await Conversation.create({
           patientId: patientId || user?.id,
+          organizationId: orgId,
           startedAt: new Date(),
           status: 'active',
           type: data.type || 'daily',
           summary: 'Voice wellness session in progress...',
         });
 
+        // Join organization room for scoped broadcasting
+        if (orgId && patientId) {
+          socket.join(`org:${orgId}:patient:${patientId}`);
+        }
+
         // Initialize session state object
         const sessionState = {
           sessionId: socket.id,
           conversationId: conversation._id.toString(),
           patientId: patientId || user?.id,
+          organizationId: socket.tenant?.organizationId,
           type: data.type || 'daily',
           status: 'LISTENING',
           history: [],

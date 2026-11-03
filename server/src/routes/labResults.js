@@ -1,9 +1,11 @@
 import express from 'express';
-import { LabResult, Patient } from '../models/index.js';
+import { LabResult } from '../models/index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { roleCheck } from '../middleware/roles.js';
+import { tenantContext } from '../middleware/tenantContext.js';
+import { requireCareTeamOrSelf } from '../middleware/tenantAuthorization.js';
 import { sendSuccess } from '../utils/response.js';
-import { NotFoundError, AuthorizationError } from '../errors/AppError.js';
+import { NotFoundError } from '../errors/AppError.js';
 import { validateRequest } from '../middleware/validate.js';
 import { labPatientParamSchema, labResultIdParamSchema } from '../validators/labResult.schemas.js';
 
@@ -11,24 +13,22 @@ const router = express.Router();
 
 /**
  * GET /api/v1/lab-results/patient/:patientId (or /api/lab-results/patient/:patientId)
- * Retrieves all laboratory panels for a specific patient.
+ * Retrieves all laboratory panels for a specific patient scoped to organization.
  */
 router.get(
   '/patient/:patientId',
   authenticateToken,
+  tenantContext,
   validateRequest({ params: labPatientParamSchema }),
+  requireCareTeamOrSelf('patientId'),
   async (req, res, next) => {
     try {
       const { patientId } = req.params;
 
-      if (req.user.role === 'PATIENT') {
-        const patient = await Patient.findOne({ userId: req.user.id });
-        if (!patient || patient._id.toString() !== patientId) {
-          throw new AuthorizationError('Access denied to clinical lab records.');
-        }
-      }
-
-      const labs = await LabResult.find({ patientId })
+      const labs = await LabResult.find({
+        patientId,
+        organizationId: req.tenant.organizationObjectId,
+      })
         .sort({ collectionDate: -1 })
         .populate('orderingClinicianId', 'name email');
 
@@ -41,7 +41,6 @@ router.get(
           totalPages: 1,
         },
       });
-      // Attach labResults alias for backward compatibility with tests checking res.data.labResults
       return response;
     } catch (err) {
       next(err);
@@ -56,15 +55,19 @@ router.get(
 router.get(
   '/:id',
   authenticateToken,
+  tenantContext,
   validateRequest({ params: labResultIdParamSchema }),
   async (req, res, next) => {
     try {
-      const lab = await LabResult.findById(req.params.id)
+      const lab = await LabResult.findOne({
+        _id: req.params.id,
+        organizationId: req.tenant.organizationObjectId,
+      })
         .populate('patientId', 'name age')
         .populate('orderingClinicianId', 'name email');
 
       if (!lab) {
-        throw new NotFoundError('Laboratory record not found.');
+        throw new NotFoundError('Laboratory record not found in this organization.');
       }
 
       return sendSuccess(res, { lab });
@@ -78,7 +81,7 @@ router.get(
  * POST /api/v1/lab-results (or /api/lab-results)
  * Creates a new clinical lab panel with dynamic markers.
  */
-router.post('/', authenticateToken, roleCheck('CLINICIAN', 'ADMIN'), async (req, res, next) => {
+router.post('/', authenticateToken, tenantContext, roleCheck('CLINICIAN', 'ADMIN'), async (req, res, next) => {
   try {
     const {
       patientId,
@@ -92,12 +95,8 @@ router.post('/', authenticateToken, roleCheck('CLINICIAN', 'ADMIN'), async (req,
       overallInterpretation,
     } = req.body;
 
-    const patient = await Patient.findById(patientId);
-    if (!patient) {
-      throw new NotFoundError('Patient not found.');
-    }
-
     const newLabResult = await LabResult.create({
+      organizationId: req.tenant.organizationObjectId,
       patientId,
       orderingClinicianId: orderingClinicianId || req.user.id,
       panelName,

@@ -45,6 +45,11 @@ const reportSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -52,6 +57,7 @@ const reportSchema = new mongoose.Schema(
 );
 
 reportSchema.index({ patientId: 1, generatedAt: -1 });
+reportSchema.index({ organizationId: 1, patientId: 1, generatedAt: -1 });
 
 export const Report = mongoose.model('Report', reportSchema);
 export default Report;

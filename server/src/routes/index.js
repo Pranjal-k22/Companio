@@ -8,6 +8,7 @@ import reportsRouter from './reports.js';
 import appointmentsRouter from './appointments.js';
 import labResultsRouter from './labResults.js';
 import conversationsRouter from './conversations.js';
+import organizationRouter from './organizationRoutes.js';
 
 const apiRouter = express.Router();
 
@@ -18,6 +19,7 @@ const apiRouter = express.Router();
  */
 apiRouter.use('/health', healthRouter);
 apiRouter.use('/auth', authRouter);
+apiRouter.use('/organizations', organizationRouter);
 apiRouter.use('/patients', patientsRouter);
 apiRouter.use('/checkins', checkinsRouter);
 apiRouter.use('/flags', flagsRouter);
@@ -27,3 +29,4 @@ apiRouter.use('/lab-results', labResultsRouter);
 apiRouter.use('/conversations', conversationsRouter);
 
 export default apiRouter;
+

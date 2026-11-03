@@ -29,3 +29,4 @@ export const createLabResultSchema = z.object({
   markers: z.array(markerSchema).min(1, 'At least one biomarker measurement is required.'),
   overallInterpretation: z.string().trim().optional(),
 });
+

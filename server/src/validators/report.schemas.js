@@ -13,3 +13,4 @@ export const generateReportBodySchema = z.object({
   periodStart: z.coerce.date().optional(),
   periodEnd: z.coerce.date().optional(),
 });
+

@@ -15,3 +15,4 @@ export const paginationQuerySchema = z.object({
   order: z.enum(['asc', 'desc', '1', '-1']).default('desc'),
   search: z.string().trim().optional(),
 });
+

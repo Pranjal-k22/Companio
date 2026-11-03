@@ -29,6 +29,11 @@ API.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
+    const orgId = localStorage.getItem('companio_organization_id');
+    if (orgId) {
+      config.headers['X-Organization-Id'] = orgId;
+    }
+
     if (!config.headers['X-Request-Id']) {
       config.headers['X-Request-Id'] = generateClientId();
     }
@@ -59,6 +64,7 @@ API.interceptors.response.use(
       if (!isLoginRequest) {
         localStorage.removeItem('companio_token');
         localStorage.removeItem('companio_user');
+        localStorage.removeItem('companio_organization_id');
         if (window.location.pathname !== '/login') {
           window.location.href = '/login?expired=true';
         }

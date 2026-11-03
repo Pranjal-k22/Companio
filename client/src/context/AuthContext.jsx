@@ -6,12 +6,14 @@ const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('companio_token') || null);
+  const [activeOrganization, setActiveOrganization] = useState(null);
+  const [userOrganizations, setUserOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fetch logged in user profile on initial app load if token exists
+  // Fetch logged in user profile and memberships on initial app load if token exists
   useEffect(() => {
-    const fetchUser = async () => {
+    const fetchUserAndOrgs = async () => {
       if (!token) {
         setLoading(false);
         return;
@@ -20,6 +22,26 @@ export const AuthProvider = ({ children }) => {
         const res = await API.get('/auth/me');
         if (res.data.success) {
           setUser(res.data.user);
+
+          // Retrieve user organization memberships
+          try {
+            const orgsRes = await API.get('/organizations');
+            if (orgsRes.data.success) {
+              const orgs = orgsRes.data.data?.organizations || orgsRes.data.organizations || [];
+              setUserOrganizations(orgs);
+
+              const storedOrgId = localStorage.getItem('companio_organization_id');
+              const matchedOrg = orgs.find((o) => o.id === storedOrgId);
+              if (matchedOrg) {
+                setActiveOrganization(matchedOrg);
+              } else if (orgs.length > 0) {
+                setActiveOrganization(orgs[0]);
+                localStorage.setItem('companio_organization_id', orgs[0].id);
+              }
+            }
+          } catch (orgErr) {
+            console.warn('[AuthContext] Failed to load organization memberships:', orgErr?.message);
+          }
         }
       } catch (err) {
         console.warn('[AuthContext] Session expired or invalid token:', err?.response?.data?.message);
@@ -29,7 +51,7 @@ export const AuthProvider = ({ children }) => {
       }
     };
 
-    fetchUser();
+    fetchUserAndOrgs();
   }, [token]);
 
   // Login handler
@@ -42,12 +64,46 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('companio_token', newToken);
         setToken(newToken);
         setUser(userData);
+
+        // Fetch organizations for logged in user
+        try {
+          const orgsRes = await API.get('/organizations', {
+            headers: { Authorization: `Bearer ${newToken}` },
+          });
+          if (orgsRes.data.success) {
+            const orgs = orgsRes.data.data?.organizations || orgsRes.data.organizations || [];
+            setUserOrganizations(orgs);
+            if (orgs.length > 0) {
+              setActiveOrganization(orgs[0]);
+              localStorage.setItem('companio_organization_id', orgs[0].id);
+            }
+          }
+        } catch {
+          // ignore background org fetch error on login
+        }
+
         return userData;
       }
     } catch (err) {
       const errMsg = err?.response?.data?.message || 'Login failed. Please check credentials.';
       setError(errMsg);
       throw new Error(errMsg);
+    }
+  };
+
+  // Switch Active Organization
+  const switchOrganization = async (orgId) => {
+    try {
+      const res = await API.post('/auth/active-organization', { organizationId: orgId });
+      if (res.data.success) {
+        localStorage.setItem('companio_organization_id', orgId);
+        const newOrg = userOrganizations.find((o) => o.id === orgId) || res.data.data?.activeOrganization;
+        setActiveOrganization(newOrg);
+        return newOrg;
+      }
+    } catch (err) {
+      const msg = err?.response?.data?.detail || err?.response?.data?.message || 'Failed to switch organization.';
+      throw new Error(msg);
     }
   };
 
@@ -73,8 +129,11 @@ export const AuthProvider = ({ children }) => {
   // Logout handler
   const logout = () => {
     localStorage.removeItem('companio_token');
+    localStorage.removeItem('companio_organization_id');
     setToken(null);
     setUser(null);
+    setActiveOrganization(null);
+    setUserOrganizations([]);
     setError(null);
   };
 
@@ -83,6 +142,9 @@ export const AuthProvider = ({ children }) => {
       value={{
         user,
         token,
+        activeOrganization,
+        userOrganizations,
+        switchOrganization,
         loading,
         error,
         login,

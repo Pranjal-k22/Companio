@@ -78,14 +78,20 @@ const conversationSchema = new mongoose.Schema(
         },
       },
     ],
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      index: true,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// Compound Index
+// Compound Indexes
 conversationSchema.index({ patientId: 1, startedAt: -1 });
+conversationSchema.index({ organizationId: 1, patientId: 1, startedAt: -1 });
 
 export const Conversation = mongoose.model('Conversation', conversationSchema);
 export default Conversation;

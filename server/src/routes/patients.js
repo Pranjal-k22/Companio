@@ -1,11 +1,15 @@
 import express from 'express';
 import { verifyToken } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roles.js';
+import { tenantContext } from '../middleware/tenantContext.js';
+import { requireCareTeamOrSelf, requirePermission } from '../middleware/tenantAuthorization.js';
 import { Patient, Checkin, Flag } from '../models/index.js';
 import { sendSuccess } from '../utils/response.js';
 import { NotFoundError } from '../errors/AppError.js';
 import { validateRequest } from '../middleware/validate.js';
 import { objectIdSchema } from '../validators/common.schemas.js';
+import { patientCreateSchema } from '../validators/patient.schemas.js';
+import { PERMISSIONS } from '../constants/permissions.js';
 import { z } from 'zod';
 
 const router = express.Router();
@@ -17,95 +21,141 @@ const patientParamSchema = z.object({
 /**
  * @route   GET /api/v1/patients (or /api/patients)
  * @desc    Get list of patients for clinician dashboard with flag counts & last checkin
+ * @access  Private (Clinician / Admin / Care Coordinator within active organization)
+ */
+router.get(
+  '/',
+  verifyToken,
+  tenantContext,
+  requireRole('CLINICIAN', 'ADMIN'),
+  async (req, res, next) => {
+    try {
+      const orgId = req.tenant.organizationObjectId;
+      const isLeadOrAdmin =
+        req.tenant.role === 'ORG_OWNER' ||
+        req.tenant.role === 'ORG_ADMIN' ||
+        req.tenant.permissions.includes(PERMISSIONS.PATIENTS_READ_ALL);
+
+      let filter = { organizationId: orgId };
+
+      if (!isLeadOrAdmin && req.user.role === 'CLINICIAN' && !req.query.all) {
+        // Find patients assigned to this clinician
+        const assignedPatients = await Patient.find({
+          organizationId: orgId,
+          assignedClinicianId: req.user.id,
+        }).lean();
+
+        // If explicitly assigned patients exist, use them; otherwise fallback to org cohort
+        if (assignedPatients.length > 0) {
+          filter = {
+            organizationId: orgId,
+            assignedClinicianId: req.user.id,
+          };
+        }
+      }
+
+      const patients = await Patient.find(filter).lean();
+
+      // Enhance each patient with open flag counts and last check-in date (all scoped to orgId)
+      const enhancedPatients = await Promise.all(
+        patients.map(async (patient) => {
+          const lastCheckin = await Checkin.findOne({
+            patientId: patient._id,
+            organizationId: orgId,
+          })
+            .sort({ timestamp: -1 })
+            .select('timestamp')
+            .lean();
+
+          const openRedFlagsCount = await Flag.countDocuments({
+            patientId: patient._id,
+            organizationId: orgId,
+            severity: 'red',
+            status: { $ne: 'reviewed' },
+          });
+
+          const openYellowFlagsCount = await Flag.countDocuments({
+            patientId: patient._id,
+            organizationId: orgId,
+            severity: 'yellow',
+            status: { $ne: 'reviewed' },
+          });
+
+          return {
+            ...patient,
+            lastCheckinDate: lastCheckin ? lastCheckin.timestamp : null,
+            openRedFlagsCount,
+            openYellowFlagsCount,
+          };
+        })
+      );
+
+      // Sort: patients with open RED flags first, then YELLOW flags, then by name
+      enhancedPatients.sort((a, b) => {
+        if (b.openRedFlagsCount !== a.openRedFlagsCount) {
+          return b.openRedFlagsCount - a.openRedFlagsCount;
+        }
+        if (b.openYellowFlagsCount !== a.openYellowFlagsCount) {
+          return b.openYellowFlagsCount - a.openYellowFlagsCount;
+        }
+        return (a.name || '').localeCompare(b.name || '');
+      });
+
+      return sendSuccess(res, enhancedPatients, {
+        legacyKey: 'patients',
+        pagination: {
+          page: 1,
+          limit: enhancedPatients.length,
+          total: enhancedPatients.length,
+          totalPages: 1,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @route   POST /api/v1/patients
+ * @desc    Enroll a new patient in the active organization
  * @access  Private (Clinician / Admin)
  */
-router.get('/', verifyToken, requireRole('CLINICIAN', 'ADMIN'), async (req, res, next) => {
-  try {
-    let filter = {};
-    if (req.user.role === 'CLINICIAN' && !req.query.all) {
-      filter = { assignedClinicianId: req.user.id || req.user.userId };
+router.post(
+  '/',
+  verifyToken,
+  tenantContext,
+  requirePermission(PERMISSIONS.PATIENTS_CREATE),
+  validateRequest({ body: patientCreateSchema }),
+  async (req, res, next) => {
+    try {
+      const patient = await Patient.create({
+        ...req.body,
+        organizationId: req.tenant.organizationObjectId,
+        assignedClinicianId: req.body.assignedClinicianId || req.user.id,
+      });
+
+      return sendSuccess(res, { patient }, { statusCode: 201, message: 'Patient enrolled successfully.' });
+    } catch (err) {
+      next(err);
     }
-
-    const patients = await Patient.find(filter).lean();
-
-    // If clinician has no directly linked patients due to ID mismatch in seed data, fallback to all patients
-    let targetPatients = patients;
-    if (targetPatients.length === 0) {
-      targetPatients = await Patient.find({}).lean();
-    }
-
-    // Enhance each patient with open flag counts and last check-in date
-    const enhancedPatients = await Promise.all(
-      targetPatients.map(async (patient) => {
-        const lastCheckin = await Checkin.findOne({ patientId: patient._id })
-          .sort({ timestamp: -1 })
-          .select('timestamp')
-          .lean();
-
-        const openRedFlagsCount = await Flag.countDocuments({
-          patientId: patient._id,
-          severity: 'red',
-          status: { $ne: 'reviewed' },
-        });
-
-        const openYellowFlagsCount = await Flag.countDocuments({
-          patientId: patient._id,
-          severity: 'yellow',
-          status: { $ne: 'reviewed' },
-        });
-
-        return {
-          ...patient,
-          lastCheckinDate: lastCheckin ? lastCheckin.timestamp : null,
-          openRedFlagsCount,
-          openYellowFlagsCount,
-        };
-      })
-    );
-
-    // Sort: patients with open RED flags first, then YELLOW flags, then by name
-    enhancedPatients.sort((a, b) => {
-      if (b.openRedFlagsCount !== a.openRedFlagsCount) {
-        return b.openRedFlagsCount - a.openRedFlagsCount;
-      }
-      if (b.openYellowFlagsCount !== a.openYellowFlagsCount) {
-        return b.openYellowFlagsCount - a.openYellowFlagsCount;
-      }
-      return (a.name || '').localeCompare(b.name || '');
-    });
-
-    return sendSuccess(res, enhancedPatients, {
-      legacyKey: 'patients',
-      pagination: {
-        page: 1,
-        limit: enhancedPatients.length,
-        total: enhancedPatients.length,
-        totalPages: 1,
-      },
-    });
-  } catch (error) {
-    next(error);
   }
-});
+);
 
 /**
  * @route   GET /api/v1/patients/:patientId
- * @desc    Get patient profile by ID
- * @access  Private (Clinician / Admin)
+ * @desc    Get patient profile by ID strictly scoped to organization & care-team
+ * @access  Private (Clinician care-team, Org Admin, or Self)
  */
 router.get(
   '/:patientId',
   verifyToken,
-  requireRole('CLINICIAN', 'ADMIN'),
+  tenantContext,
   validateRequest({ params: patientParamSchema }),
+  requireCareTeamOrSelf('patientId'),
   async (req, res, next) => {
     try {
-      const { patientId } = req.params;
-      const patient = await Patient.findById(patientId).lean();
-      if (!patient) {
-        throw new NotFoundError('Patient record not found.');
-      }
-      return sendSuccess(res, { patient });
+      return sendSuccess(res, { patient: req.patient });
     } catch (error) {
       next(error);
     }

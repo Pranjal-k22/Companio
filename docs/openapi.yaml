@@ -85,6 +85,135 @@ paths:
         '401':
           $ref: '#/components/responses/401AuthenticationError'
 
+  /auth/active-organization:
+    post:
+      summary: Switch Active Organization Context
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId]
+              properties:
+                organizationId:
+                  type: string
+      responses:
+        '200':
+          description: Context switched successfully
+        '403':
+          $ref: '#/components/responses/403ForbiddenError'
+
+  /organizations:
+    get:
+      summary: List Organizations For Current User
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User organization memberships
+    post:
+      summary: Create New Organization
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrganizationRequest'
+      responses:
+        '201':
+          description: Organization created (caller assigned ORG_OWNER)
+
+  /organizations/{id}:
+    get:
+      summary: Get Organization Profile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Organization details
+    patch:
+      summary: Update Organization Profile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Organization updated
+
+  /organizations/{id}/members:
+    get:
+      summary: List Organization Members
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Member roster
+
+  /organizations/{id}/invitations:
+    post:
+      summary: Dispatch Invitation to Organization
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Invitation created
+
+  /organizations/{id}/teams:
+    get:
+      summary: List Organization Clinical Teams
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Clinical care teams
+    post:
+      summary: Create Clinical Team
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Team created
+
   /patients:
     get:
       summary: List Assigned Patients
@@ -478,3 +607,4 @@ components:
               type: string
             timestamp:
               type: string
+

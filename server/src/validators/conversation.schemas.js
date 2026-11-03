@@ -16,3 +16,4 @@ export const startVoiceSessionSchema = z.object({
   patientId: objectIdSchema.optional(),
   type: z.enum(['daily', 'weekly', 'medication_review', 'symptom_followup', 'appointment_prep']).default('daily'),
 });
+

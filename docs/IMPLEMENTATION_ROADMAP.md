@@ -3,7 +3,7 @@
 **Document Reference**: `docs/IMPLEMENTATION_ROADMAP.md`  
 **Target Architecture**: Modular Monolith + Dedicated Voice Gateway + Distributed Worker  
 **Product**: AI Voice-First Health & Wellness Platform for Adults 55+  
-**Current Phase**: Phase 1 Complete (Awaiting Phase 2 Authorization)  
+**Current Phase**: Phase 2 Complete (Awaiting Phase 3 Authorization)  
 **Execution Philosophy**: Small verified increments; zero disruption to working code; preserve existing route compatibility.
 
 ---
@@ -11,9 +11,9 @@
 ## Roadmap Overview
 
 ```
-Phase 0 [DONE] ──► Phase 1 [DONE] ──► Phase 2 [NEXT] ──► Phase 3 ──► Phase 4 ──► Phase 5
-Baseline Audit     API & v1           Tenancy & Auth     Consent &   Voice Hard-  Convers-
-                   Foundations                           Privacy     ening        ation Plan
+Phase 0 [DONE] ──► Phase 1 [DONE] ──► Phase 2 [DONE] ──► Phase 3 [NEXT] ──► Phase 4 ──► Phase 5
+Baseline Audit     API & v1           Tenancy & Auth     Consent &          Voice Hard-  Convers-
+                   Foundations                           Privacy            ening        ation Plan
 ```
 
 ---
@@ -46,21 +46,26 @@ Baseline Audit     API & v1           Tenancy & Auth     Consent &   Voice Hard-
 
 ---
 
-## Phase 2: Organizations, Tenancy & Advanced Authorization (Status: ⏳ PENDING AUTHORIZATION)
+## Phase 2: Organizations, Tenancy & Advanced Authorization (Status: ✅ COMPLETED)
 * **Goal**: Introduce true multi-tenancy and patient-care-team relationship authorization to prevent cross-tenant enumeration or unauthorized record access.
-* **Key Tasks**:
-  1. Create `Organization` schema (`name`, `slug`, `timezone`, `facilities`, `escalationPolicies`, `status`).
-  2. Create `Membership` schema (`organizationId`, `userId`, `role`, `permissions`, `assignedTeams`).
-  3. Expand `roles.js` middleware to enforce both role permission (`CLINICIAN`, `PATIENT`, `ORG_ADMIN`, `CAREGIVER`) AND explicit care-team relationship or patient self-ownership.
-  4. Add `organizationId` index and query filters to all tenant-owned models (`Patient`, `Checkin`, `Flag`, `Report`, `Appointment`, `LabResult`).
-  5. Add caregiver delegation grant model (`CaregiverGrant`: `patientId`, `caregiverUserId`, `scopes`, `expiry`, `status`).
-  6. Implement refresh token rotation (`POST /api/v1/auth/refresh`) and active session revocation (`GET /api/v1/sessions`, `DELETE /api/v1/sessions/:id`).
-  7. Add automated negative test suite verifying cross-tenant IDOR rejection (404/403 concealment policy).
-* **Exit Criteria**: Cross-tenant isolation test suite passes 100%; no clinician can query an unassigned patient in another organization.
+* **Deliverables**:
+  - Core Tenancy Schemas: `Organization`, `Membership`, `Team`, `Invitation` (`server/src/models/`)
+  - Tenant Scoping & Compound Indexes across 8 domain models (`Patient`, `Checkin`, `Conversation`, `Flag`, `Report`, `Appointment`, `LabResult`, `EscalationEvent`)
+  - Safe Database Migration Framework: `server/src/migrations/001_phase2_multi_tenancy.js` with `--dry-run`, `--execute`, and `--verify` modes (successfully migrated baseline to `Metro Senior Health Partners`)
+  - Tenant Context Resolution Middleware: `server/src/middleware/tenantContext.js` verifying database memberships
+  - Granular RBAC/ABAC Policy Middleware: `server/src/middleware/tenantAuthorization.js` (`requirePermission`, `requireCareTeamOrSelf`) with 404 concealment policy
+  - Granular Permission Catalog: `server/src/constants/permissions.js` (28 permissions across 5 roles)
+  - Multi-Tenancy REST APIs: `/api/v1/organizations` routes & controllers for orgs, teams, memberships, invitations
+  - Voice Gateway Tenant Partitioning: Socket.io `/voice` namespace with tenant room isolation (`org:${orgId}:patient:${patientId}`)
+  - Background Worker Multi-Tenant Partitioning: `weeklyReportWorker.js` processing patient cohorts partitioned by tenant
+  - Frontend Multi-Tenancy Integration: `client/src/services/api.js` (`X-Organization-Id`) and `AuthContext.jsx` with active organization state and switching
+  - Automated Verification Suite: `server/src/testMultiTenancy.js` (20/20 checks passing)
+  - Specifications: `docs/ORGANIZATION_ARCHITECTURE.md`, `docs/MULTI_TENANCY_SECURITY.md`, `docs/DATABASE_MIGRATION_PHASE_2.md`, `docs/RBAC_PERMISSION_MATRIX.md`, `docs/PHASE_2_COMPLETION_REPORT.md`
+* **Exit Criteria**: Cross-tenant isolation test suite passes 100% (20/20); zero cross-tenant enumeration; all regression test suites pass with zero regressions. (Met on 2026-11-03)
 
 ---
 
-## Phase 3: Consent & Privacy Engineering
+## Phase 3: Consent & Privacy Engineering (Status: ⏳ PENDING AUTHORIZATION)
 * **Goal**: Build an immutable, versioned consent engine and ensure zero PHI or unredacted clinical data leaks into logs or third-party storage.
 * **Key Tasks**:
   1. Create `ConsentRecord` schema (`patientId`, `purpose`, `noticeVersion`, `decision` [GRANTED/WITHDRAWN], `channel`, `actor`, `timestamp`).

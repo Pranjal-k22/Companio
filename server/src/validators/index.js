@@ -7,3 +7,5 @@ export * from './flag.schemas.js';
 export * from './report.schemas.js';
 export * from './appointment.schemas.js';
 export * from './labResult.schemas.js';
+export * from './organization.schemas.js';
+

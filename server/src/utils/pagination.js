@@ -70,3 +70,4 @@ export function formatPagination(total, page, limit) {
 }
 
 export default { parsePagination, formatPagination };
+

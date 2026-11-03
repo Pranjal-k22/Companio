@@ -5,6 +5,33 @@ All notable changes to the Companio healthcare platform will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-11-03
+
+### Added
+- **Multi-Tenant SaaS Architecture**: Complete tenant isolation across hospitals, health systems, and clinics.
+- **Core Multi-Tenancy Models**: Added `Organization`, `Membership`, `Team`, and `Invitation` schemas with compound indexes.
+- **Tenant Scoping on Domain Models**: Added `organizationId` and compound indexes across `Patient`, `Checkin`, `Conversation`, `Flag`, `Report`, `Appointment`, `LabResult`, and `EscalationEvent`.
+- **Database Migration Framework**: Created safe, idempotent migration engine (`server/src/migrations/`) supporting `--dry-run`, `--execute`, and `--verify`. Successfully migrated legacy data to `Metro Senior Health Partners`.
+- **Tenant Context Resolution Middleware**: Created `server/src/middleware/tenantContext.js` verifying database memberships and attaching `req.tenant`.
+- **Granular RBAC/ABAC Policy Engine**: Added catalog of 28 granular permissions (`server/src/constants/permissions.js`), `requirePermission`, and `requireCareTeamOrSelf` middleware (`server/src/middleware/tenantAuthorization.js`).
+- **Care Team Scoping**: Implemented multi-disciplinary clinical teams with primary clinician assignments and patient membership mapping.
+- **Cryptographic Invitations**: Secure organization invitations using 32-byte cryptographically random SHA-256 tokens with single-use redemption and expiration.
+- **Multi-Tenancy REST APIs**: Added endpoints for organizations, teams, memberships, invitations, and active tenant switching under `/api/v1/organizations`.
+- **Tenant-Partitioned Voice Gateway**: Scoped Socket.io `/voice` namespace connections to verified organization memberships and isolated room broadcasting (`org:${orgId}:patient:${patientId}`).
+- **Tenant-Partitioned Background Workers**: Re-engineered `weeklyReportWorker.js` to process patient cohorts partitioned strictly by tenant with independent metric generation.
+- **Frontend Multi-Tenant Integration**: Updated `client/src/services/api.js` and `client/src/context/AuthContext.jsx` with active organization state and organization switcher support.
+- **Automated Multi-Tenancy Test Suite**: Created `server/src/testMultiTenancy.js` with 20 comprehensive security checks validating cross-tenant 404 concealment, membership verification, and care team boundaries.
+- **Architectural & Security Documentation**: Authored `docs/ORGANIZATION_ARCHITECTURE.md`, `docs/MULTI_TENANCY_SECURITY.md`, `docs/DATABASE_MIGRATION_PHASE_2.md`, and `docs/RBAC_PERMISSION_MATRIX.md`.
+
+### Changed
+- Updated `User.js` schema to support the `CAREGIVER` role.
+- Updated report generation service (`server/src/services/reportGenerator.js`) to inherit tenant scoping and isolate trend calculations.
+- Updated OpenAPI specification (`docs/openapi.yaml`) and API reference (`docs/API_REFERENCE.md`) with organization and team management schemas.
+
+### Security
+- **404 Concealment**: Enforced strict `404 Not Found` responses when querying cross-tenant records to prevent resource enumeration attacks.
+- **Zero Client Trust**: All tenant context is verified against active database memberships rather than client-supplied headers.
+
 ## [1.1.0] - 2026-11-03
 
 ### Added
@@ -26,3 +53,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Resolved ZodError mapping to handle both `.issues` and `.errors` gracefully.
 - Maintained 100% backwards compatibility for legacy frontend consumers.
+

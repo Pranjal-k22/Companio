@@ -1,10 +1,11 @@
 import express from 'express';
 import { verifyToken } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roles.js';
-import { Report, Patient } from '../models/index.js';
+import { tenantContext } from '../middleware/tenantContext.js';
+import { requireCareTeamOrSelf } from '../middleware/tenantAuthorization.js';
+import { Report } from '../models/index.js';
 import { generateClinicianReport } from '../services/reportGenerator.js';
 import { sendSuccess } from '../utils/response.js';
-import { NotFoundError } from '../errors/AppError.js';
 import { validateRequest } from '../middleware/validate.js';
 import { reportPatientParamSchema, generateReportBodySchema } from '../validators/report.schemas.js';
 
@@ -13,23 +14,23 @@ const router = express.Router();
 /**
  * @route   GET /api/v1/reports/:patientId (or /api/reports/:patientId)
  * @desc    Get latest report for a patient (or generate on demand if none exists / older than range)
- * @access  Private (Clinician / Admin)
+ * @access  Private (Clinician / Admin / Patient Self)
  */
 router.get(
   '/:patientId',
   verifyToken,
+  tenantContext,
   requireRole('CLINICIAN', 'ADMIN'),
   validateRequest({ params: reportPatientParamSchema }),
+  requireCareTeamOrSelf('patientId'),
   async (req, res, next) => {
     try {
       const { patientId } = req.params;
 
-      const patient = await Patient.findById(patientId);
-      if (!patient) {
-        throw new NotFoundError('Patient not found.');
-      }
-
-      let report = await Report.findOne({ patientId }).sort({ generatedAt: -1 });
+      let report = await Report.findOne({
+        patientId,
+        organizationId: req.tenant.organizationObjectId,
+      }).sort({ generatedAt: -1 });
 
       const maxAgeMs = 14 * 24 * 60 * 60 * 1000; // 14 days
       const isStale = report ? Date.now() - new Date(report.generatedAt).getTime() > maxAgeMs : true;
@@ -55,18 +56,18 @@ router.get(
 router.get(
   '/:patientId/history',
   verifyToken,
+  tenantContext,
   requireRole('CLINICIAN', 'ADMIN'),
   validateRequest({ params: reportPatientParamSchema }),
+  requireCareTeamOrSelf('patientId'),
   async (req, res, next) => {
     try {
       const { patientId } = req.params;
 
-      const patient = await Patient.findById(patientId);
-      if (!patient) {
-        throw new NotFoundError('Patient not found.');
-      }
-
-      const reports = await Report.find({ patientId }).sort({ generatedAt: -1 });
+      const reports = await Report.find({
+        patientId,
+        organizationId: req.tenant.organizationObjectId,
+      }).sort({ generatedAt: -1 });
 
       return sendSuccess(res, reports, {
         legacyKey: 'reports',
@@ -91,8 +92,10 @@ router.get(
 router.post(
   '/:patientId/generate',
   verifyToken,
+  tenantContext,
   requireRole('CLINICIAN', 'ADMIN'),
   validateRequest({ params: reportPatientParamSchema, body: generateReportBodySchema }),
+  requireCareTeamOrSelf('patientId'),
   async (req, res, next) => {
     try {
       const { patientId } = req.params;

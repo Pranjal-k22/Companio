@@ -98,6 +98,11 @@ const labResultSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -107,6 +112,7 @@ const labResultSchema = new mongoose.Schema(
 // Compound indexes for time-series lab trending and abnormal flag review
 labResultSchema.index({ patientId: 1, collectionDate: -1 });
 labResultSchema.index({ patientId: 1, category: 1, collectionDate: -1 });
+labResultSchema.index({ organizationId: 1, patientId: 1, collectionDate: -1 });
 
 export const LabResult = mongoose.model('LabResult', labResultSchema);
 export default LabResult;

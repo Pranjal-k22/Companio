@@ -38,3 +38,4 @@ export const updateProfileSchema = z.object({
     })
     .optional(),
 });
+

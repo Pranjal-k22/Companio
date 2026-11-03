@@ -27,3 +27,4 @@ export const updateAppointmentSchema = z.object({
   reason: z.string().trim().optional(),
   notes: z.string().trim().optional(),
 });
+

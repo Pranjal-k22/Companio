@@ -57,3 +57,4 @@ export const createCheckinSchema = z.object({
   wellbeingScore: z.number().min(1).max(10).optional(),
   sentimentScore: z.number().min(-1).max(1).optional(),
 });
+

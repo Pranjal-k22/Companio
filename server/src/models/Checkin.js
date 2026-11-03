@@ -71,6 +71,11 @@ const checkinSchema = new mongoose.Schema(
       default: 0,
     },
     patientConcerns: [{ type: String, trim: true }],
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      index: true,
+    },
     timestamp: {
       type: Date,
       default: Date.now,
@@ -82,8 +87,9 @@ const checkinSchema = new mongoose.Schema(
   }
 );
 
-// Requirement: Add compound index on (patientId, timestamp)
+// Requirement: Add compound indexes on (patientId, timestamp) and (organizationId, patientId)
 checkinSchema.index({ patientId: 1, timestamp: -1 });
+checkinSchema.index({ organizationId: 1, patientId: 1, timestamp: -1 });
 
 export const Checkin = mongoose.model('Checkin', checkinSchema);
 export default Checkin;
