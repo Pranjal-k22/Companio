@@ -85,3 +85,4 @@ export function TableSkeleton({ rows = 4, cols = 4 }) {
 }
 
 export default Skeleton;
+

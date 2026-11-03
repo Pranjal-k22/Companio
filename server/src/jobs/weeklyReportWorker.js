@@ -91,3 +91,4 @@ export function initWeeklyReportCron() {
 }
 
 export default { runWeeklyReportBatch, initWeeklyReportCron };
+

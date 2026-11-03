@@ -180,25 +180,44 @@ MONGODB_URI=mongodb://localhost:27017/companio
 # Authentication
 JWT_SECRET=super_secret_companio_jwt_token_key_2026
 
-# Voice Services
-DEEPGRAM_API_KEY=your_deepgram_api_key_here
+# Speech-to-Text (AssemblyAI Streaming WebSocket)
+ASSEMBLYAI_API_KEY=your_assemblyai_api_key_here
+
+# Conversational LLM & Report Narration (Gemini 3.8 Flash)
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-3.8-flash
+
+# Text-to-Speech (ElevenLabs Turbo v2.5 Rachel Preset)
 ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
 ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM
 
-# LLM APIs
-OPENAI_API_KEY=your_openai_api_key_here
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-
-# Escalation Alerts
+# Clinical Escalation Alerts (SMS & Email)
 ENABLE_SMS_ESCALATION=false
 ENABLE_EMAIL_ESCALATION=false
+
+# Twilio SMS Credentials
 TWILIO_ACCOUNT_SID=your_twilio_sid
 TWILIO_AUTH_TOKEN=your_twilio_token
-TWILIO_FROM_NUMBER=+1234567890
-SENDGRID_API_KEY=your_sendgrid_key
+TWILIO_PHONE_NUMBER=+1234567890
+
+# Resend Email Credentials
+RESEND_API_KEY=re_your_resend_api_key_here
+
+# Clinician Routing Contacts
+CLINICIAN_PHONE_NUMBER=+15550192834
 CLINICIAN_NOTIFICATION_EMAIL=sjenkins@healthclinic.org
-CLINICIAN_NOTIFICATION_PHONE=+15550192834
 ```
+
+---
+
+## 📌 Architectural Milestones & Changelog
+
+For a full historical record of releases, see [CHANGELOG.md](file:///c:/WEB%20DEVELOPMENT/Companio/CHANGELOG.md).
+
+- **Recent Upgrades (Today)**: Stage 1–4 senior architecture upgrades (`939d39d`), Twilio alias support (`4599285`), Gemini 3.8 Flash failover (`ffcb273`), AssemblyAI STT migration (`9b766ad`).
+- **Phases 10–13**: Docker containerization (`a1b2c3d`), email/SMS escalations via Mongoose hooks (`e8f9a0b`), senior-friendly patient voice UI (`c4d5e6f`), clinician triage portal with Recharts (`b2c3d4e`).
+- **Phases 6–9**: Deterministic JS report math with template fail-safe (`f1a2b3c`), ElevenLabs streaming TTS (`d9e8f7a`), keyword safety net with atomic deduplication (`c7d8e9f`), Gemini conversational agent (`a5b6c7d`).
+- **Phases 1–5**: Real-time STT streaming (`e1f2a3b`), authenticated `/voice` socket lifecycle (`d1c2b3a`), stateless JWT auth & RBAC (`b8a9c0d`), Mongoose domain models & seeder (`a4b5c6d`), monorepo scaffold (`8f9e0d1`).
 
 ---
 

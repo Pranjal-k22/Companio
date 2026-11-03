@@ -110,3 +110,4 @@ labResultSchema.index({ patientId: 1, category: 1, collectionDate: -1 });
 
 export const LabResult = mongoose.model('LabResult', labResultSchema);
 export default LabResult;
+

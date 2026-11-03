@@ -82,3 +82,4 @@ appointmentSchema.index({ status: 1, dateTime: 1 });
 
 export const Appointment = mongoose.model('Appointment', appointmentSchema);
 export default Appointment;
+
