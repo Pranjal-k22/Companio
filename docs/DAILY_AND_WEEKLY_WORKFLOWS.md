@@ -68,3 +68,4 @@ If a patient expresses hesitation or declines to answer a specific question (*"I
 1. The system immediately acknowledges respectfully: *"No problem at all, we can skip that."*
 2. The section is recorded as `SKIPPED` or `DECLINED` in `DialogueSession.skippedSections`.
 3. The conversation advances to the next section without pressuring or re-asking.
+

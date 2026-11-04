@@ -200,3 +200,4 @@ observationSchema.index({ patientId: 1, observationCode: 1, effectiveDateTime: -
 
 export const Observation = mongoose.model('Observation', observationSchema);
 export default Observation;
+

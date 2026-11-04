@@ -646,13 +646,49 @@ paths:
         '200':
           description: Flag status updated
 
-  /reports/{patientId}:
+  /reports:
     get:
-      summary: Retrieve Latest Clinical Retrospective Report
+      summary: List Clinical Reports
+      description: Retrieves paginated clinical retrospective reports with filtering by patient, status, report type, date range, or staleness.
       security:
         - bearerAuth: []
       parameters:
         - name: patientId
+          in: query
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [GENERATED, VALIDATING, DRAFT, PENDING_REVIEW, APPROVED, PUBLISHED, REJECTED, SUPERSEDED, AMENDED, STALE]
+        - name: reportType
+          in: query
+          schema:
+            type: string
+            enum: [WEEKLY_RETROSPECTIVE, AD_HOC_SUMMARY, MONTHLY_REVIEW, INCIDENT_FOLLOWUP]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Paginated list of clinical reports
+
+  /reports/{id}:
+    get:
+      summary: Retrieve Clinical Report by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
           in: path
           required: true
           schema:
@@ -660,11 +696,221 @@ paths:
             pattern: '^[0-9a-fA-F]{24}$'
       responses:
         '200':
-          description: Synthesized clinical report with deterministic trend analytics
+          description: Synthesized clinical report with deterministic trend analytics and attestation
 
-  /reports/{patientId}/generate:
+  /reports/{id}/versions:
+    get:
+      summary: Retrieve Report Version History
+      description: Returns the complete immutable version lineage (v1, v2, etc.) for a root clinical report.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Version lineage array
+
+  /reports/{id}/attestations:
+    get:
+      summary: Retrieve Clinician Attestation History
+      description: Returns the legal attestation records and SHA-256 verification hashes for the report.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Attestation audit trail
+
+  /reports/{id}/provenance:
+    get:
+      summary: Retrieve Report Provenance Graph
+      description: Returns the SHA-256 canonical digest and claim-to-evidence graph linking narrative statements to source observation ObjectIds.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cryptographic provenance graph and source snapshots
+
+  /reports/{id}/export:
+    get:
+      summary: Export Report as PDF or FHIR R4 Bundle
+      description: Generates a binary PDF document (with watermarks for unapproved drafts) or structured FHIR R4 DiagnosticReport JSON bundle.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [pdf, fhir]
+            default: pdf
+      responses:
+        '200':
+          description: Exported document
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                type: object
+
+  /reports/{id}/regenerate:
     post:
-      summary: Trigger On-Demand Report Synthesis
+      summary: Regenerate Report Draft
+      description: Re-runs the aggregator, deterministic analytics engine, and narration against the latest validated observations, incrementing version if draft.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Regenerated report document
+
+  /reports/{id}/review:
+    post:
+      summary: Transition Report to Pending Review
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Report transitioned to PENDING_REVIEW
+
+  /reports/{id}/approve:
+    post:
+      summary: Clinician Attestation and Approval
+      description: Clinician provides electronic attestation statement, SHA-256 hash validation, and locks report to APPROVED.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [attestationStatement, statementVersion, confirmedContentHash]
+              properties:
+                attestationStatement:
+                  type: string
+                statementVersion:
+                  type: string
+                confirmedContentHash:
+                  type: string
+                clinicalNotes:
+                  type: string
+      responses:
+        '200':
+          description: Approved report with attestation details
+
+  /reports/{id}/reject:
+    post:
+      summary: Clinician Rejection of Report Draft
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rejectionReason]
+              properties:
+                rejectionReason:
+                  type: string
+      responses:
+        '200':
+          description: Report status transitioned to REJECTED
+
+  /reports/{id}/amend:
+    post:
+      summary: Non-Destructive Clinician Amendment
+      description: Creates a superseding report version (vN+1) preserving previous approved versions as AMENDED / SUPERSEDED.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amendmentReason, sections]
+              properties:
+                amendmentReason:
+                  type: string
+                sections:
+                  type: object
+      responses:
+        '201':
+          description: Newly created amended report version
+
+  /reports/{id}/publish:
+    post:
+      summary: Publish Approved Clinical Report
+      description: Marks an approved report as PUBLISHED for patient/caregiver visibility or EHR transmission.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Report published
+
+  /patients/{patientId}/reports/generate:
+    post:
+      summary: Trigger On-Demand Deterministic Report Generation
       security:
         - bearerAuth: []
       parameters:
@@ -674,9 +920,25 @@ paths:
           schema:
             type: string
             pattern: '^[0-9a-fA-F]{24}$'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reportType:
+                  type: string
+                  enum: [WEEKLY_RETROSPECTIVE, AD_HOC_SUMMARY, MONTHLY_REVIEW, INCIDENT_FOLLOWUP]
+                  default: WEEKLY_RETROSPECTIVE
+                startDate:
+                  type: string
+                  format: date-time
+                endDate:
+                  type: string
+                  format: date-time
       responses:
         '201':
-          description: Newly synthesized report
+          description: Newly generated report in DRAFT status
 
   /appointments:
     get:
@@ -1106,6 +1368,149 @@ components:
               type: integer
             totalPages:
               type: integer
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+            timestamp:
+              type: string
+
+    DeterministicMetrics:
+      type: object
+      properties:
+        medicationAdherence:
+          type: object
+          properties:
+            adherencePercentage:
+              type: number
+            dosesTaken:
+              type: integer
+            dosesMissed:
+              type: integer
+            dosesTotal:
+              type: integer
+            dosesDeclined:
+              type: integer
+            dosesUnknown:
+              type: integer
+        sleepMetrics:
+          type: object
+          properties:
+            sleepAvg:
+              type: number
+            sleepObservationsCount:
+              type: integer
+            sleepDeficitNights:
+              type: integer
+        hydrationMetrics:
+          type: object
+          properties:
+            hydrationAvgMl:
+              type: number
+            hydrationDaysTracked:
+              type: integer
+            belowTargetDays:
+              type: integer
+        weightMetrics:
+          type: object
+          properties:
+            weightChange:
+              type: number
+            currentWeight:
+              type: number
+            weightUnit:
+              type: string
+            rapidGainDetected:
+              type: boolean
+
+    ReportAttestation:
+      type: object
+      properties:
+        clinicianUserId:
+          type: string
+        clinicianName:
+          type: string
+        attestationStatement:
+          type: string
+        statementVersion:
+          type: string
+        confirmedContentHash:
+          type: string
+        attestedAt:
+          type: string
+          format: date-time
+        ipAddress:
+          type: string
+        userAgent:
+          type: string
+
+    EvidenceReference:
+      type: object
+      properties:
+        targetSection:
+          type: string
+        claimSummary:
+          type: string
+        evidenceType:
+          type: string
+          enum: [OBSERVATION, FLAG, METRIC, CHECKIN]
+        sourceId:
+          type: string
+        sourceSnippet:
+          type: string
+        confidence:
+          type: number
+
+    ClinicalReportResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            _id:
+              type: string
+            patientId:
+              type: string
+            organizationId:
+              type: string
+            reportType:
+              type: string
+            status:
+              type: string
+              enum: [GENERATED, VALIDATING, DRAFT, PENDING_REVIEW, APPROVED, PUBLISHED, REJECTED, SUPERSEDED, AMENDED, STALE]
+            version:
+              type: integer
+            rootReportId:
+              type: string
+            supersedesReportId:
+              type: string
+            contentHash:
+              type: string
+            narrationEngine:
+              type: string
+              enum: [GEMINI, TEMPLATE_FALLBACK]
+            deterministicMetrics:
+              $ref: '#/components/schemas/DeterministicMetrics'
+            sections:
+              type: object
+            attestation:
+              $ref: '#/components/schemas/ReportAttestation'
+            evidenceReferences:
+              type: array
+              items:
+                $ref: '#/components/schemas/EvidenceReference'
+            dataCompleteness:
+              type: object
+              properties:
+                overallStatus:
+                  type: string
+                limitations:
+                  type: array
+                  items:
+                    type: string
         meta:
           type: object
           properties:

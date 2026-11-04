@@ -67,3 +67,4 @@ When a senior confirms a correction:
 - The new observation records `supersedesObservationId` pointing to the retracted document.
 - The correction reason (`correctionReason = 'PATIENT_CORRECTION'`) is logged in the permanent audit trail.
 - Historical data is permanently preserved for clinical retrospective audit.
+

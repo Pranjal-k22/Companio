@@ -20,6 +20,8 @@ import ConsentRecord, {
 import SafetyRule, { APPROVED_CATEGORIES, ALL_APPROVED_CATEGORIES } from './SafetyRule.js';
 import DialogueSession from './DialogueSession.js';
 import Observation, { LOINC_MAPPINGS } from './Observation.js';
+import ReportAttestation, { ATTESTATION_STATEMENT_DEFAULT } from './ReportAttestation.js';
+import { REPORT_STATUSES, REPORT_TYPES, NARRATION_MODES } from './Report.js';
 
 export {
   User,
@@ -28,6 +30,11 @@ export {
   Checkin,
   Flag,
   Report,
+  REPORT_STATUSES,
+  REPORT_TYPES,
+  NARRATION_MODES,
+  ReportAttestation,
+  ATTESTATION_STATEMENT_DEFAULT,
   EscalationEvent,
   Appointment,
   LabResult,

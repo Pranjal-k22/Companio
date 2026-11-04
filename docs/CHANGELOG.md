@@ -5,6 +5,27 @@ All notable changes to the Companio healthcare platform will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-11-04
+
+### Added
+- **Deterministic Clinical Reporting Architecture**: End-to-end report generation lifecycle decoupling deterministic mathematics from natural language narration (`DETERMINISTIC_REPORTING_ARCHITECTURE.md`).
+- **Report Data Aggregator**: Tenant-scoped patient observation and flag aggregation with reproducible input snapshots and source version hashing (`reportDataAggregator.js`).
+- **Deterministic Clinical Analytics Engine**: Pure JavaScript calculation modules for medication adherence, sleep, hydration, activity, symptoms, wellbeing, weight, and data completeness (`clinicalAnalyticsEngine.js`, `CLINICAL_METRICS_SPECIFICATION.md`).
+- **Clinician Attestation Engine**: Immutable attestation record model (`ReportAttestation.js`) and verification service (`attestationService.js`) enforcing formal clinical sign-off, explicit legal statement, and immutable status locking.
+- **Report Version Lifecycle**: Non-destructive amendment management spawning new versions while preserving previous approved reports (`reportVersionService.js`, `REPORT_VERSIONING.md`).
+- **Report Provenance & Evidence Linkage**: Canonical SHA-256 content hashing and claim-to-evidence graph mapping narrative statements to contributing raw observations (`reportProvenanceService.js`, `REPORT_PROVENANCE.md`).
+- **Report Narration & Template Fallback**: Zod-validated structured Gemini narration paired with zero-failure deterministic template synthesis (`reportNarrationService.js`).
+- **Secure PDF Export**: Professional clinical PDF generation with draft watermarking for unapproved reports and attestation blocks for approved reports (`reportExportService.js`, `REPORT_EXPORT_SPECIFICATION.md`).
+- **FHIR Standards Mapping**: Standard-compliant transformation layer for FHIR R4 `DiagnosticReport` and `Observation` resources with verified LOINC mappings (`fhirMappingService.js`).
+- **Clinician Reporting Workspace UI**: Added interactive report viewer with version badges, attestation banner, AI vs template indicators, data completeness audit, PDF export button, and Attest / Amend / Provenance modals in `PatientDetail.jsx` and `ClinicianDashboard.jsx`.
+- **Report REST API Suite**: 13 versioned REST endpoints under `/api/v1/reports` and `/api/v1/patients/:id/reports/generate` with backward-compatible aliases.
+- **Phase 7 Master Test Suite**: 11 dedicated test suites verifying all 30 required clinical criteria with 100% pass rate (`testReportingMaster.js`).
+
+### Changed
+- Upgraded `Report.js` model with versioning, lifecycle status, content hash, deterministic metrics, data completeness, and source snapshot.
+- Updated `weeklyReportWorker.js` to generate tenant-partitioned `PENDING_REVIEW` draft reports requiring clinician attestation.
+- Updated OpenAPI 3.1 specification (`docs/openapi.yaml`).
+
 ## [1.6.0] - 2026-11-04
 
 ### Added

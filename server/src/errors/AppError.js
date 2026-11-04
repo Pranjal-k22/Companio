@@ -61,6 +61,9 @@ export class AuthorizationError extends AppError {
   }
 }
 
+export const ForbiddenError = AuthorizationError;
+export const BadRequestError = ValidationError;
+
 export class NotFoundError extends AppError {
   constructor(detail = 'The requested resource was not found.') {
     super({

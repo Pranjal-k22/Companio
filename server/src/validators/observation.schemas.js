@@ -73,3 +73,4 @@ export const verifyObservationSchema = z.object({
   verificationStatus: z.enum(['VERIFIED', 'REJECTED']),
   clinicalRationale: z.string().optional(),
 });
+

@@ -3,7 +3,7 @@
 **Document Reference**: `docs/IMPLEMENTATION_ROADMAP.md`  
 **Target Architecture**: Modular Monolith + Dedicated Voice Gateway + Distributed Worker  
 **Product**: AI Voice-First Health & Wellness Platform for Adults 55+  
-**Current Phase**: Phase 5 Complete (Awaiting Phase 6 Authorization)  
+**Current Phase**: Phase 7 Complete (Awaiting Phase 8 Authorization)  
 **Execution Philosophy**: Small verified increments; zero disruption to working code; preserve existing route compatibility.
 
 ---
@@ -11,9 +11,9 @@
 ## Roadmap Overview
 
 ```
-Phase 0 [DONE] ──► Phase 1 [DONE] ──► Phase 2 [DONE] ──► Phase 3 [DONE] ──► Phase 4 [DONE] ──► Phase 5 [DONE] ──► Phase 6 [NEXT]
-Baseline Audit     API & v1           Tenancy & Auth     Consent &          Voice Hard-        Safety Net &       Dialogue &
-                   Foundations                           Privacy            ening              Escalation         Observations
+Phase 0 [DONE] ──► Phase 1 [DONE] ──► Phase 2 [DONE] ──► Phase 3 [DONE] ──► Phase 4 [DONE] ──► Phase 5 [DONE] ──► Phase 6 [DONE] ──► Phase 7 [DONE] ──► Phase 8 [NEXT]
+Baseline Audit     API & v1           Tenancy & Auth     Consent &          Voice Hard-        Safety Net &       Dialogue &         Reporting &        Platform Polish
+                   Foundations                           Privacy            ening              Escalation         Observations       Attestation
 ```
 
 ---
@@ -146,19 +146,24 @@ Baseline Audit     API & v1           Tenancy & Auth     Consent &          Voic
 
 ---
 
-## Phase 7: Deterministic Reporting & Clinician Attestation (Status: ⏳ NEXT)
-* **Goal**: Ensure 100% of clinical numbers are calculated by deterministic code, enforce strict JSON schemas on AI summaries, and introduce clinician review/approval states.
-* **Key Tasks**:
-  1. Implement Report states: `draft`, `in_review`, `approved`, `amended`, `rejected`.
-  2. Ensure AI service account can only generate `draft` status; approval strictly requires an authenticated clinician JWT.
-  3. Add clinician amendment endpoint (`POST /api/v1/reports/:id/amend`) recording original text, clinician amendments, reason, and timestamp.
-  4. Add data completeness markers (e.g., flag missing days in 7-day reporting period).
-  5. Add golden report fixture tests comparing deterministic JS calculations against expected historical benchmarks.
-* **Exit Criteria**: Zero math discrepancies; clinician amendment audit trail verified.
+## Phase 7: Deterministic Reporting & Clinician Attestation (Status: ✅ COMPLETED)
+* **Goal**: Ensure 100% of clinical numbers are calculated by deterministic code, enforce strict schemas on AI summaries, implement formal clinician review and attestation, and maintain tamper-evident version control.
+* **Deliverables**:
+  - Decoupled reporting architecture: pure JavaScript analytics engine (`clinicalAnalyticsEngine.js`, `metrics/`) paired with structured narration (`reportNarrationService.js`).
+  - Strict denominator medication adherence, sleep, hydration, activity, symptoms, wellbeing, weight, and data completeness calculators (`CLINICAL_METRICS_SPECIFICATION.md`).
+  - Report Version Lifecycle: 10 lifecycle states, version increments ($v1, v2, v3$), non-destructive amendments, and staleness detection (`reportVersionService.js`, `REPORT_VERSIONING.md`).
+  - Clinician Attestation Engine: Immutable attestation records (`ReportAttestation.js`), explicit clinical statement verification, and status locking to `APPROVED` (`attestationService.js`, `CLINICIAN_ATTESTATION.md`).
+  - Report Provenance & Tamper-Evidence: Canonical SHA-256 content hashing and claim-to-evidence graph mapping narrative statements to source `Observation` IDs (`reportProvenanceService.js`, `REPORT_PROVENANCE.md`).
+  - Secure In-Memory PDF Export: Accessible PDF generation with draft watermarking and formal attestation blocks (`reportExportService.js`, `REPORT_EXPORT_SPECIFICATION.md`).
+  - FHIR Standards Mapping: Standard-compliant transformation layer for FHIR R4 `DiagnosticReport` and `Observation` resources (`fhirMappingService.js`).
+  - Clinician Reporting Workspace UI: Interactive report viewer with version badges, attestation banner, AI vs template indicators, data completeness audit, PDF export button, and Attest / Amend / Provenance modals in `PatientDetail.jsx` and `ClinicianDashboard.jsx`.
+  - 13 versioned REST endpoints under `/api/v1/reports` and `/api/v1/patients/:id/reports/generate` with backward-compatible aliases.
+  - Automated Master Verification Suite: `server/src/testReportingMaster.js` (30/30 checks passing across all 11 reporting suites).
+* **Exit Criteria**: 100% of Phase 7 automated checks passing (30/30); Phase 1–6 regression checks passing (305/305); frontend production build passing; zero regressions. (Met on 2026-11-04)
 
 ---
 
-## Phase 8: Platform Feature Completion & Clean UI Binding
+## Phase 8: Platform Feature Completion & Clean UI Binding (Status: ⏳ NEXT)
 * **Goal**: Eliminate all remaining mock data across secondary pages, connect caregiver views, and provide clinician triage configuration.
 * **Key Tasks**:
   1. Verify and polish `PatientAppointments.jsx`, `ClinicianAppointments.jsx`, `PatientPathology.jsx`, `ClinicianVoiceLogs.jsx`.

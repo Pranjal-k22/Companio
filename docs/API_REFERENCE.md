@@ -346,3 +346,66 @@ All endpoints require authentication and are scoped to the active organization t
 - **Access**: Clinician / Admin only
 - **Body**: `{ verificationStatus: "VERIFIED" | "REJECTED", clinicalRationale?: string }`
 - **Description**: Clinician verification and attestation of health observation.
+
+---
+
+## 9. Deterministic Clinical Reporting & Attestation Endpoints (Phase 7)
+
+### 9.1 `GET /api/v1/reports`
+- **Access**: Care-team Clinician / Admin
+- **Query Params**: `patientId`, `status`, `reportType`, `startDate`, `endDate`, `staleOnly`, `page`, `limit`
+- **Description**: Retrieves paginated clinical retrospective reports with multi-tenant filtering.
+
+### 9.2 `GET /api/v1/reports/:id`
+- **Access**: Care-team Clinician / Patient Self
+- **Description**: Retrieves a single clinical report by ID including deterministic metrics, narrative sections, attestation, and evidence references.
+
+### 9.3 `GET /api/v1/reports/:id/versions`
+- **Access**: Care-team Clinician / Admin
+- **Description**: Retrieves full immutable version lineage (v1, v2, v3...) for a root clinical report.
+
+### 9.4 `GET /api/v1/reports/:id/attestations`
+- **Access**: Care-team Clinician / Admin
+- **Description**: Retrieves the legal clinician attestation audit trail and confirmed cryptographic digests.
+
+### 9.5 `GET /api/v1/reports/:id/provenance`
+- **Access**: Care-team Clinician / Admin
+- **Description**: Retrieves SHA-256 canonical digest and claim-to-evidence graph linking narrative statements to source observation and flag ObjectIds.
+
+### 9.6 `GET /api/v1/reports/:id/export`
+- **Access**: Care-team Clinician / Admin
+- **Query Params**: `format=pdf` (default) or `format=fhir`
+- **Description**: Generates in-memory signed PDF (with draft watermark if unapproved) or FHIR R4 `DiagnosticReport` / `Observation` JSON bundle.
+
+### 9.7 `POST /api/v1/reports/:id/regenerate`
+- **Access**: Care-team Clinician
+- **Description**: Re-runs aggregation and deterministic calculations against the latest observations, incrementing version if draft.
+
+### 9.8 `POST /api/v1/reports/:id/review`
+- **Access**: Care-team Clinician
+- **Description**: Transitions report from `DRAFT` / `GENERATED` into `PENDING_REVIEW` queue.
+
+### 9.9 `POST /api/v1/reports/:id/approve`
+- **Access**: Care-team Clinician / Admin only
+- **Body**: `{ attestationStatement: string, statementVersion: string, confirmedContentHash: string, clinicalNotes?: string }`
+- **Description**: Clinician attests to clinical accuracy; verifies SHA-256 content digest and permanently locks report to `APPROVED`.
+
+### 9.10 `POST /api/v1/reports/:id/reject`
+- **Access**: Care-team Clinician / Admin only
+- **Body**: `{ rejectionReason: string }`
+- **Description**: Rejects an unsatisfactory report draft with auditable clinical rationale.
+
+### 9.11 `POST /api/v1/reports/:id/amend`
+- **Access**: Care-team Clinician / Admin only
+- **Body**: `{ amendmentReason: string, sections: { executiveSummary?: string, medicationAdherence?: string, ... } }`
+- **Description**: Non-destructive amendment; marks previous version `SUPERSEDED` / `AMENDED` and creates next version (e.g. `v2`).
+
+### 9.12 `POST /api/v1/reports/:id/publish`
+- **Access**: Care-team Clinician / Admin only
+- **Description**: Publishes an approved report, making it visible to patient/caregivers or EHR integration feeds.
+
+### 9.13 `POST /api/v1/patients/:patientId/reports/generate`
+- **Access**: Care-team Clinician / Admin
+- **Body**: `{ reportType?: "WEEKLY_RETROSPECTIVE" | "AD_HOC_SUMMARY", startDate?: string, endDate?: string }`
+- **Description**: Triggers on-demand retrospective report synthesis using pure JavaScript deterministic analytics and validated Gemini narration.
+

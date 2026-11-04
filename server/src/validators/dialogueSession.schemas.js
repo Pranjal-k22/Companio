@@ -19,3 +19,4 @@ export const confirmSessionSchema = z.object({
   confirmationStatus: z.enum(['CONFIRMED', 'DISPUTED', 'BYPASSED']),
   readbackTranscript: z.string().optional(),
 });
+

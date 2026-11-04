@@ -111,3 +111,4 @@ To preserve backward compatibility with all existing clinician dashboards, Recha
 7. `falls`, `mobility`, `weight`: Synthesized from weekly surveillance observations.
 
 The projection uses atomic upsert by `conversationId`, guaranteeing zero duplicate check-in documents.
+

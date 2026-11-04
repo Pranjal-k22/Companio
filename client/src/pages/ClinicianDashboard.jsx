@@ -19,6 +19,9 @@ import {
   Headphones,
   ShieldAlert,
   BellRing,
+  FileText,
+  Award,
+  Download,
 } from 'lucide-react';
 import { PatientCardSkeleton } from '../components/common/Skeleton';
 
@@ -27,14 +30,17 @@ export default function ClinicianDashboard() {
   const { theme } = useTheme();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState('roster'); // 'roster' | 'triage'
+  const [activeTab, setActiveTab] = useState('roster'); // 'roster' | 'triage' | 'reports'
   const [patients, setPatients] = useState([]);
   const [triageFlags, setTriageFlags] = useState([]);
+  const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingTriage, setLoadingTriage] = useState(false);
+  const [loadingReports, setLoadingReports] = useState(false);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [riskFilter, setRiskFilter] = useState('ALL'); // 'ALL' | 'RED' | 'YELLOW' | 'STABLE'
+  const [reportStatusFilter, setReportStatusFilter] = useState('ALL');
 
   const fetchPatients = async () => {
     setLoading(true);
@@ -66,6 +72,22 @@ export default function ClinicianDashboard() {
     }
   };
 
+  const fetchReports = async () => {
+    setLoadingReports(true);
+    try {
+      const params = {};
+      if (reportStatusFilter !== 'ALL') params.status = reportStatusFilter;
+      const res = await API.get('/reports', { params });
+      if (res.data.success) {
+        setReports(res.data.data || res.data.reports || []);
+      }
+    } catch (err) {
+      console.error('Error fetching clinical reports:', err);
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
   useEffect(() => {
     fetchPatients();
   }, []);
@@ -73,8 +95,10 @@ export default function ClinicianDashboard() {
   useEffect(() => {
     if (activeTab === 'triage') {
       fetchTriageFlags();
+    } else if (activeTab === 'reports') {
+      fetchReports();
     }
-  }, [activeTab]);
+  }, [activeTab, reportStatusFilter]);
 
   const handleAcknowledgeFlag = async (flagId, e) => {
     if (e) e.stopPropagation();
@@ -154,6 +178,18 @@ export default function ClinicianDashboard() {
                 {totalRedFlags}
               </span>
             )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('reports')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+              activeTab === 'reports'
+                ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
+                : 'text-slate-600 dark:text-slate-300 hover:text-teal-500'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            Clinical Reports
           </button>
         </div>
       </div>
@@ -532,6 +568,124 @@ export default function ClinicianDashboard() {
                           className="px-3.5 py-2 text-xs font-bold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1"
                         >
                           Open Chart <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ===================== TAB 3: CLINICAL REPORTS WORKSPACE ===================== */}
+      {activeTab === 'reports' && (
+        <div className="space-y-4">
+          <div
+            className={`p-4 rounded-3xl border flex flex-col sm:flex-row items-center justify-between gap-4 ${
+              theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+            }`}
+          >
+            <div className="flex items-center space-x-2 overflow-x-auto w-full sm:w-auto">
+              {[
+                { id: 'ALL', label: 'All Reports' },
+                { id: 'PENDING_REVIEW', label: '⏳ Awaiting Attestation' },
+                { id: 'APPROVED', label: '✔ Approved & Attested' },
+                { id: 'DRAFT', label: 'Draft' },
+                { id: 'STALE', label: '⚠️ Stale' },
+              ].map((chip) => (
+                <button
+                  key={chip.id}
+                  onClick={() => setReportStatusFilter(chip.id)}
+                  className={`px-3.5 py-2 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+                    reportStatusFilter === chip.id
+                      ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-teal-500'
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={fetchReports}
+              disabled={loadingReports}
+              className="p-2.5 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-teal-500 transition shrink-0"
+              title="Refresh Reports"
+            >
+              <RefreshCw className={`w-4 h-4 ${loadingReports ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
+          {loadingReports ? (
+            <div className="p-8 text-center text-xs text-slate-400">Loading reports...</div>
+          ) : reports.length === 0 ? (
+            <div
+              className={`p-12 text-center rounded-3xl border ${
+                theme === 'dark' ? 'bg-slate-900/60 border-slate-800' : 'bg-white border-slate-200'
+              }`}
+            >
+              <FileText className="w-10 h-10 text-teal-500 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-slate-400">No reports found matching this filter.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {reports.map((rep) => {
+                const pat = rep.patientId || {};
+                const isAttested = rep.status === 'APPROVED' || rep.status === 'PUBLISHED';
+
+                return (
+                  <div
+                    key={rep._id}
+                    className={`p-6 rounded-3xl border transition shadow-sm ${
+                      theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200'
+                    }`}
+                  >
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-base font-extrabold text-white">{pat.name || 'Patient'}</h3>
+                          <span className="px-2 py-0.5 bg-slate-800 text-slate-300 text-[10px] font-bold rounded-full">
+                            v{rep.version || 1}
+                          </span>
+                          <span
+                            className={`px-2.5 py-0.5 text-[10px] font-extrabold rounded-full border ${
+                              isAttested
+                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                                : rep.status === 'STALE'
+                                ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                                : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                            }`}
+                          >
+                            {rep.status}
+                          </span>
+                        </div>
+
+                        <p className="text-xs text-slate-400">
+                          Period: {new Date(rep.periodStart).toLocaleDateString()} to {new Date(rep.periodEnd).toLocaleDateString()} |
+                          Generated: {new Date(rep.generatedAt).toLocaleString()}
+                        </p>
+
+                        <p className="text-xs text-slate-300 line-clamp-2 mt-1">{rep.overview}</p>
+
+                        {isAttested && rep.attestation && (
+                          <div className="text-[11px] text-emerald-400 flex items-center gap-1.5 pt-1">
+                            <Award className="w-3.5 h-3.5" />
+                            Attested by {rep.attestation.clinicianName || 'Clinician'} on{' '}
+                            {new Date(rep.attestation.attestedAt).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => navigate(`/clinician/patient/${pat._id || rep.patientId}`)}
+                          className="px-4 py-2 text-xs font-bold rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 transition flex items-center gap-1"
+                        >
+                          {rep.status === 'PENDING_REVIEW' ? 'Review & Attest' : 'View Report'}{' '}
+                          <ChevronRight className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>

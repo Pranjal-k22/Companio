@@ -114,3 +114,4 @@ export const DAILY_WORKFLOW = {
 };
 
 export default DAILY_WORKFLOW;
+

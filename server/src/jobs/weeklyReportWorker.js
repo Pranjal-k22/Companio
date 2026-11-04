@@ -1,6 +1,7 @@
 import cron from 'node-cron';
-import { Patient, Organization } from '../models/index.js';
+import { Patient, Organization, Report } from '../models/index.js';
 import { generateClinicianReport } from '../services/reportGenerator.js';
+import { ReportVersionService } from '../services/reporting/reportVersionService.js';
 import logger from '../utils/logger.js';
 
 const BATCH_SIZE = 50;
@@ -10,6 +11,7 @@ const BATCH_SIZE = 50;
  * When options.organizationId is provided, executes strictly for that tenant.
  * When omitted, iterates active organizations independently so that one organization's failure
  * never impacts another.
+ * Reports are created in PENDING_REVIEW status and require clinician attestation.
  *
  * @param {object} options
  * @param {string} [options.organizationId] - Optional organization ID to scope processing
@@ -73,11 +75,28 @@ export async function runWeeklyReportBatch(options = {}) {
           totalProcessed++;
           orgProcessed++;
           try {
-            const report = await generateClinicianReport(patient._id, periodStart, periodEnd);
+            // Check if there is an existing pending draft for this patient, check staleness
+            const existingDraft = await Report.findOne({
+              patientId: patient._id,
+              organizationId: orgId || patient.organizationId,
+              status: { $in: ['DRAFT', 'PENDING_REVIEW'] },
+            }).sort({ generatedAt: -1 });
+
+            if (existingDraft) {
+              await ReportVersionService.checkAndMarkStaleness(existingDraft._id);
+            }
+
+            // Generate report in PENDING_REVIEW state (never auto-attested)
+            const report = await generateClinicianReport(patient._id, periodStart, periodEnd, {
+              organizationId: orgId || patient.organizationId,
+              reportType: 'WEEKLY_REPORT',
+              initialStatus: 'PENDING_REVIEW',
+            });
+
             succeeded++;
             orgSucceeded++;
             console.log(
-              `✔ [Cron Worker] Generated report for ${patient.name} (${patient._id}) in Org ${orgSlug} -> Report ID: ${report._id}`
+              `✔ [Cron Worker] Generated PENDING_REVIEW report for ${patient.name} (${patient._id}) in Org ${orgSlug} -> Report ID: ${report._id} (v${report.version})`
             );
           } catch (err) {
             failed++;
@@ -128,9 +147,7 @@ export async function runWeeklyReportBatch(options = {}) {
  * Initializes the weekly cron schedule (Mondays at 2:00 AM server local time).
  */
 export function initWeeklyReportCron() {
-  // Cron schedule: "0 2 * * 1" -> Minute 0, Hour 2, Day of Month *, Month *, Day of Week 1 (Monday)
   const cronExpression = process.env.WEEKLY_REPORT_CRON || '0 2 * * 1';
-
   console.log(`[Cron Scheduler] Initializing Weekly Report Worker with pattern: "${cronExpression}"`);
 
   cron.schedule(cronExpression, async () => {
@@ -145,4 +162,3 @@ export function initWeeklyReportCron() {
 }
 
 export default { runWeeklyReportBatch, initWeeklyReportCron };
-

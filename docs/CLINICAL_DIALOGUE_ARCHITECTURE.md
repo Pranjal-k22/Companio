@@ -114,3 +114,4 @@ When a patient experiences a network drop:
 1. `sessionRecoveryManager` generates a cryptographically secure 5-minute resume token.
 2. The `DialogueAgenda` state (`currentSectionIndex`, `completedSections`, `skippedSections`, `pendingClarifications`) is serialized into the token record and saved to `Conversation.agendaState`.
 3. Upon client reconnection via `voice:session:resume`, `ClinicalDialogueManager.recoverSession` restores the exact agenda state so the senior never has to restart from the beginning.
+

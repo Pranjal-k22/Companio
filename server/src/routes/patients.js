@@ -354,4 +354,43 @@ router.get(
   }
 );
 
+/**
+ * @route   POST /api/v1/patients/:patientId/reports/generate
+ * @desc    Generate a clinical report for patient
+ * @access  Private (Clinician / Admin)
+ */
+router.post(
+  '/:patientId/reports/generate',
+  verifyToken,
+  tenantContext,
+  requireRole('CLINICIAN', 'ADMIN'),
+  validateRequest({ params: patientParamSchema }),
+  requireCareTeamOrSelf('patientId'),
+  async (req, res, next) => {
+    try {
+      const { patientId } = req.params;
+      const { startDate, endDate, periodStart: pStart, periodEnd: pEnd, reportType } = req.body || {};
+
+      const start = startDate || pStart;
+      const end = endDate || pEnd;
+      const periodEnd = end ? new Date(end) : new Date();
+      const periodStart = start ? new Date(start) : new Date(periodEnd.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+      const { generateClinicianReport } = await import('../services/reportGenerator.js');
+      const newReport = await generateClinicianReport(patientId, periodStart, periodEnd, {
+        organizationId: req.tenant.organizationObjectId,
+        reportType: reportType || 'WEEKLY_REPORT',
+      });
+
+      return sendSuccess(
+        res,
+        { report: newReport },
+        { statusCode: 201, message: 'New clinician report generated successfully.' }
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 export default router;

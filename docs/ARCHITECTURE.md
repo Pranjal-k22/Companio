@@ -1,7 +1,7 @@
 # 🏛️ Companio — System Architecture & Engineering Blueprint
 
 **Document Reference**: `docs/ARCHITECTURE.md`  
-**Current Milestone**: Phase 6 (Clinical Dialogue Manager & Observation Quality Engine)  
+**Current Milestone**: Phase 7 (Deterministic Clinical Reporting & Clinician Attestation)  
 **Repository Baseline**: `main`
 
 ---
@@ -294,3 +294,38 @@ Prior to starting a speech session on `/voice`:
 
 ### 12.6 Idempotent Checkin Projection
 - `ObservationQualityEngine.projectToCheckin()` performs atomic upsert into `Checkin`, preserving 100% backward compatibility with `computeClinicalTrends` and `weeklyReportWorker`.
+
+---
+
+## 13. Deterministic Clinical Reporting & Clinician Attestation (Phase 7)
+
+### 13.1 Non-Generative Clinical Math & Calculation Invariant
+- The LLM **never** calculates clinical numbers, averages, adherence rates, or trends.
+- Pure JavaScript deterministic algorithms calculate 8 domain metric categories: Medication Adherence, Sleep Metrics, Hydration Metrics, Activity Metrics, Symptom Progression, Wellbeing & Mood, Weight Fluctuations, and Data Completeness.
+- The denominator for medication adherence is strictly $\text{taken} + \text{missed}$. Unknown and declined doses are audited separately and never assumed taken or coerced to zero.
+- Missing physiological observations (sleep, hydration, weight) are never coerced to zero, avoiding artificial metric drops.
+
+### 13.2 Report Lifecycle & State Machine
+- Enforces an immutable 10-state lifecycle: `GENERATED` ➔ `VALIDATING` ➔ `DRAFT` ➔ `PENDING_REVIEW` ➔ `APPROVED` ➔ `PUBLISHED`.
+- Invalidation states: `REJECTED`, `SUPERSEDED`, `AMENDED`, and `STALE`.
+- Automated cron generation creates `PENDING_REVIEW` drafts. Generated reports **never** automatically become approved or published without clinician review.
+
+### 13.3 Narrative Synthesis & Template Fail-Safe Fallback
+- Gemini 2.5 Flash / 3.8 Flash acts strictly as a narrative synthesizer, receiving only deterministic numbers and structured clinical flags.
+- Strict Zod validation guarantees the output matches the required 8 sections.
+- If Gemini is unreachable, rate-limited, or fails validation, the system falls back seamlessly to `TEMPLATE_FALLBACK`, producing deterministic, zero-hallucination narratives.
+
+### 13.4 Cryptographic Provenance & Evidence Graph
+- Every report version calculates a SHA-256 canonical digest across its deterministic metrics, narrative sections, and source version hash.
+- Claim-to-evidence graph explicitly links each narrative section back to underlying `Observation`, `Flag`, `Metric`, and `Checkin` ObjectIds.
+- Any modification to source snapshot or narrative alters the digest, enabling instant tamper detection.
+
+### 13.5 Clinician Attestation & Non-Destructive Version Lineage
+- Approval requires an explicit electronic legal attestation statement, statement version, and confirmation of the computed SHA-256 content hash.
+- Attestation records are permanently logged in the `ReportAttestation` collection with clinician user ID, organization membership, timestamp, IP address, and user agent.
+- Approved reports are strictly immutable. Amendments create non-destructive versions ($v1 \rightarrow v2 \rightarrow v3$) preserving complete historical lineage and audit trails.
+
+### 13.6 Multi-Format Secure Export & Interoperability
+- Dynamic PDF export generates in-memory signed clinical summaries with diagonal `DRAFT - NOT CLINICALLY ATTESTED` watermarks for unapproved reports, or full electronic attestation blocks for approved reports.
+- FHIR R4 mapping transforms Companio reports into compliant `DiagnosticReport` and component `Observation` resource bundles.
+

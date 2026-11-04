@@ -79,3 +79,4 @@ The patient's verbal response is classified into one of four deterministic inten
   - Sets `Observation.confirmationStatus = 'DISPUTED'` or `'PROPOSED'`.
   - Projects check-in with `confirmedByPatient = false` and `confirmationMethod = 'AUTO_TIMEOUT'`.
   - Never marks data patient-confirmed without affirmative verification.
+
