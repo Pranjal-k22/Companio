@@ -68,6 +68,8 @@ router.post('/:name/retry', async (req, res, next) => {
 /**
  * POST /api/v1/admin/queues/:name/clean
  * Cleans old completed or failed jobs from a queue.
+ * SAFETY INVARIANT: Cleaning ephemeral jobs from BullMQ NEVER modifies or deletes
+ * permanent MongoDB EscalationEvent records or clinical Flag documents.
  */
 router.post('/:name/clean', async (req, res, next) => {
   try {
@@ -75,7 +77,24 @@ router.post('/:name/clean', async (req, res, next) => {
     const { graceMs = 86400000, type = 'completed' } = req.body;
 
     const cleanedCount = await cleanQueue(name, graceMs, type);
-    sendSuccess(res, { cleanedCount, queue: name, type }, { message: `Cleaned ${cleanedCount} jobs` });
+
+    logger.info(
+      `[AdminQueueAPI:Audit] User ${req.user?._id} (${req.user?.role}) cleaned ${cleanedCount} ${type} jobs from queue '${name}'. Underlying MongoDB clinical audit trail remains preserved.`,
+      {
+        userId: req.user?._id,
+        userRole: req.user?.role,
+        queue: name,
+        type,
+        cleanedCount,
+        action: 'QUEUE_CLEAN',
+      }
+    );
+
+    sendSuccess(
+      res,
+      { cleanedCount, queue: name, type, auditPreserved: true },
+      { message: `Cleaned ${cleanedCount} jobs. MongoDB audit trail permanently preserved.` }
+    );
   } catch (err) {
     next(err);
   }

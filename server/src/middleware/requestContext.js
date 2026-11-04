@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
+import metricsRegistry from '../services/telemetry/metricsRegistry.js';
 
 const SAFE_ID_REGEX = /^[a-zA-Z0-9_-]{8,64}$/;
 
@@ -22,10 +23,22 @@ export function requestContextMiddleware(req, res, next) {
 
   res.setHeader('X-Request-Id', requestId);
 
-  // Log request lifecycle on completion
+  // Log request lifecycle & update Prometheus metrics on completion
   res.on('finish', () => {
     const durationMs = Date.now() - req.startTime;
     const statusCode = res.statusCode;
+    const method = req.method;
+    const route = req.baseUrl || req.route?.path || req.path || 'unknown';
+
+    // Record Prometheus Telemetry
+    try {
+      metricsRegistry.httpRequestsTotal.inc(1, { method, route, status: String(statusCode) });
+      metricsRegistry.httpRequestDurationMs.observe(durationMs, { method, route });
+      if (statusCode >= 400) {
+        metricsRegistry.httpErrorsTotal.inc(1, { method, route, status: String(statusCode) });
+      }
+    } catch {}
+
     const logData = {
       requestId,
       method: req.method,

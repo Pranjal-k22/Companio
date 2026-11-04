@@ -1,7 +1,7 @@
 # 🏛️ Companio — System Architecture & Engineering Blueprint
 
 **Document Reference**: `docs/ARCHITECTURE.md`  
-**Current Milestone**: Phase 7 (Deterministic Clinical Reporting & Clinician Attestation)  
+**Current Milestone**: Phase 10 (Enterprise Operations, Observability & Release Gates A–E)  
 **Repository Baseline**: `main`
 
 ---
@@ -394,6 +394,19 @@ Prior to starting a speech session on `/voice`:
 
 ### 15.4 Queue Observability & Administration
 - Administrative endpoints (`/api/v1/admin/queues`) allow authorized clinicians and admins to inspect queue health, monitor worker counts, triage failed dead-letter jobs, retry failed jobs, and trigger on-demand maintenance passes.
+
+---
+
+## 16. Enterprise Operations, Observability & Release Gates (Phase 10)
+
+### 16.1 Release Gates A–E Operational Framework
+Companio implements a formal 5-gate operational gating matrix:
+- **Gate A (Infrastructure Readiness)**: Strict environment validation schema (`envValidator.js`), Redis Sentinel/TLS/auth options, MongoDB connection pool ping telemetry, Kubernetes probes (`/live`, `/ready`, `/startup`), multi-stage Dockerfiles (`node:20-alpine`, `USER node`), and hardened Compose configurations.
+- **Gate B (Observability & Monitoring)**: Prometheus OpenMetrics standard exposition on `/metrics` with zero-PHI labels, operational alert engine (`alertEngine.js`) monitoring failure rates and connection health with webhook dispatch, and cross-tier correlation tracing (`correlationTracker.js`).
+- **Gate C (Operational Reliability)**: MongoDB durable outbox reconciler (`outboxReconciler.js`) sweeping stuck or orphaned `QUEUED` / `RETRY_PENDING` escalation events back into BullMQ. Clinical flag preservation invariant strictly preserved.
+- **Gate D (Security & Access Control)**: IP rate limiting on auth and general REST endpoints (`rateLimiter.js`), privileged administrative access controls on queue management endpoints with permanent MongoDB audit safeguards (`auditPreserved: true`).
+- **Gate E (Release Validation & Gating)**: Concurrency throughput verification (50 concurrent requests in <60ms), queue concurrency stress simulation on live Redis, database snapshot reconciliation, and 9 operational disaster recovery runbooks.
+
 
 
 

@@ -14,9 +14,12 @@ import { socketAuthMiddleware } from './sockets/socketAuth.js';
 import { initVoiceSocket } from './sockets/voiceSession.js';
 import { initWeeklyReportCron } from './jobs/weeklyReportWorker.js';
 import { initBackgroundWorkers } from './jobs/workerBootstrap.js';
+import validateEnvironment from './config/envValidator.js';
+import metricsRouter from './routes/metrics.js';
 
-// Load environment variables
+// Load and validate environment variables
 dotenv.config();
+validateEnvironment();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -64,11 +67,14 @@ app.get('/api/v1/test/clinician-only', verifyToken, requireRole('CLINICIAN', 'AD
 app.get('/api/test/clinician-only', verifyToken, requireRole('CLINICIAN', 'ADMIN'), testClinicianOnly);
 
 // Root route fallback
+app.use('/metrics', metricsRouter);
+
 app.get('/', (req, res) => {
   res.json({
     message: 'Companio AI Voice Agent Server is running.',
     version: '1.0.0',
     healthEndpoint: '/api/v1/health',
+    metricsEndpoint: '/metrics',
     legacyHealthEndpoint: '/api/health',
   });
 });

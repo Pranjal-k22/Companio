@@ -513,3 +513,38 @@ All endpoints require authentication and are scoped to the active organization t
 
 
 
+
+
+---
+
+## 12. Enterprise Operations & Observability Endpoints (Phase 10)
+
+### 12.1 `GET /metrics`
+- **Access**: OpenMetrics / Prometheus Scrapers (or internal network)
+- **Content-Type**: `text/plain; version=0.0.4; charset=utf-8`
+- **Description**: Exposes system operational metrics in Prometheus text exposition format (HTTP request total & latency histograms, BullMQ queue depths, active voice sessions, database connection gauges).
+- **HIPAA Invariant**: Strict zero-PHI label policy.
+
+### 12.2 `GET /api/v1/health`
+- **Access**: Public / Orchestrator
+- **Description**: Comprehensive system health check returning Node.js uptime, memory heap usage, MongoDB connection state and latency, and Redis connection state.
+
+### 12.3 `GET /api/v1/health/live`
+- **Access**: Public / Kubernetes Liveness Probe
+- **Description**: Returns `200 OK` `{ "status": "live", "timestamp": "..." }` indicating process responsiveness.
+
+### 12.4 `GET /api/v1/health/ready`
+- **Access**: Public / Kubernetes Readiness Probe
+- **Description**: Returns `200 OK` `{ "status": "ready" }` only when MongoDB and Redis connections are active. Returns `503 Service Unavailable` if primary dependencies are degraded.
+
+### 12.5 `GET /api/v1/health/startup`
+- **Access**: Public / Kubernetes Startup Probe
+- **Description**: Returns `200 OK` `{ "status": "started" }` once the server has bootstrapped background workers and registered database listeners.
+
+### 12.6 `GET /api/v1/admin/alerts`
+- **Access**: Clinician / Admin
+- **Description**: Returns list of currently active operational alerts (e.g. database disconnect, high error rate, outbox backlog).
+
+### 12.7 `POST /api/v1/admin/alerts/evaluate`
+- **Access**: Clinician / Admin
+- **Description**: Triggers an on-demand evaluation of operational alert rules and returns active alerts.

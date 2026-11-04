@@ -5,6 +5,21 @@ All notable changes to the Companio healthcare platform will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-11-04
+
+### Added
+- **Release Gates A–E Operational Matrix**: Formally implemented and verified 5 operational gates (Infrastructure, Observability, Operational Reliability, Security, Release Validation) in `server/src/tests/operations/testPhase10Operations.js`.
+- **Zod Environment Validator**: Mandatory startup configuration validation schema in `server/src/config/envValidator.js` rejecting insecure defaults.
+- **Enterprise Redis & MongoDB Options**: Added TLS encryption (`rediss://`), Sentinel high-availability, password auth, and active database pool ping latency checks.
+- **Kubernetes Health Probes**: `/api/v1/health`, `/api/v1/health/live`, `/api/v1/health/ready`, and `/api/v1/health/startup` in `server/src/routes/health.js`.
+- **Prometheus OpenMetrics Telemetry**: OpenMetrics text exposition on `GET /metrics` (`metricsRegistry.js`) with strict zero-PHI label invariant.
+- **Operational Alerting Engine**: Real-time rule evaluation in `alertEngine.js` for database outages, Redis degradation, and outbox backlogs with webhook dispatch.
+- **Cross-Tier Distributed Tracing**: Correlation context tracking across HTTP requests, Flags, Outbox, BullMQ, and Reports (`correlationTracker.js`).
+- **MongoDB Durable Outbox Reconciler**: Background sweep in `outboxReconciler.js` re-enqueueing orphaned outbox events to BullMQ with priority.
+- **Rate Limiting & Security Hardening**: Auth (20/15m) and REST API (300/1m) rate limiters in `rateLimiter.js`.
+- **Permanent Audit Safeguards**: Queue cleanup endpoints (`POST /admin/queues/:name/clean`) explicitly safeguard MongoDB clinical audit records.
+- **9 Operational Disaster Recovery Runbooks**: Comprehensive recovery procedures authored in `docs/PHASE_10_OPERATIONAL_RUNBOOKS.md`.
+
 ## [1.9.0] - 2026-11-04
 
 ### Added

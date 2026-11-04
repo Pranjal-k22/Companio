@@ -42,3 +42,15 @@
 | `ELEVENLABS_API_KEY` | *Empty (Fallback)* | ElevenLabs low-latency TTS API key. |
 | `AUDIO_RETENTION_MODE`| `disabled` | **MUST** remain `disabled` for zero audio retention. |
 
+### 1.5 Enterprise Operations & Observability (Phase 10)
+| Variable | Default Value | Description |
+| :--- | :--- | :--- |
+| `REDIS_TLS` | `false` | Enables TLS encryption for Redis connections (`rediss://`). |
+| `REDIS_PASSWORD` | *Empty* | Password authentication for Redis instances. |
+| `REDIS_SENTINEL_HOSTS` | *Empty* | Comma-delimited list of Redis Sentinel hosts (`host1:26379,host2:26379`). |
+| `REDIS_SENTINEL_NAME` | `mymaster` | Redis Sentinel monitored master group name. |
+| `OPS_ALERT_WEBHOOK_URL`| *Empty* | Webhook endpoint for operational alert dispatch. |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | Rate limiter sliding window duration (milliseconds). |
+| `RATE_LIMIT_MAX` | `300` | Maximum requests allowed per rate limiter window per IP. |
+
+

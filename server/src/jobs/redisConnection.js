@@ -23,27 +23,50 @@ export function isFallbackPermitted() {
 /**
  * Returns connection configuration options for ioredis and BullMQ.
  * BullMQ requires maxRetriesPerRequest to be null on Redis clients.
+ * Supports TLS (rediss://), password authentication, and Sentinel high-availability.
  */
 export function getRedisConfig() {
   const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
   const forceFallback = process.env.REDIS_FALLBACK === 'true';
+  const isTls = process.env.REDIS_TLS === 'true' || redisUrl.startsWith('rediss://');
+  const password = process.env.REDIS_PASSWORD || undefined;
+
+  const baseOptions = {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    connectTimeout: 2500,
+    password,
+    retryStrategy(times) {
+      if (times > 3) {
+        // After 3 attempts, avoid spamming logs and allow fallback mode if permitted
+        return null;
+      }
+      return Math.min(times * 500, 2000);
+    },
+    lazyConnect: true,
+  };
+
+  if (isTls) {
+    baseOptions.tls = {
+      rejectUnauthorized: process.env.REDIS_TLS_REJECT_UNAUTHORIZED !== 'false',
+    };
+  }
+
+  // Redis Sentinel configuration for high availability
+  if (process.env.REDIS_SENTINEL_HOSTS) {
+    const sentinelHosts = process.env.REDIS_SENTINEL_HOSTS.split(',').map((h) => {
+      const [host, port] = h.trim().split(':');
+      return { host, port: parseInt(port || '26379', 10) };
+    });
+    baseOptions.sentinels = sentinelHosts;
+    baseOptions.name = process.env.REDIS_SENTINEL_NAME || 'mymaster';
+  }
 
   return {
     redisUrl,
     forceFallback,
-    options: {
-      maxRetriesPerRequest: null,
-      enableReadyCheck: false,
-      connectTimeout: 2000,
-      retryStrategy(times) {
-        if (times > 3) {
-          // After 3 attempts, avoid spamming logs and allow fallback mode if permitted
-          return null;
-        }
-        return Math.min(times * 500, 2000);
-      },
-      lazyConnect: true,
-    },
+    isTls,
+    options: baseOptions,
   };
 }
 
@@ -198,12 +221,26 @@ export async function checkRedisHealth() {
     const pong = await sharedRedisClient.ping();
     const latencyMs = Date.now() - startTime;
 
+    let redisVersion = 'unknown';
+    let usedMemoryHuman = undefined;
+
+    try {
+      const infoRaw = await sharedRedisClient.info();
+      const vMatch = infoRaw.match(/redis_version:([^\r\n]+)/);
+      if (vMatch) redisVersion = vMatch[1];
+      const mMatch = infoRaw.match(/used_memory_human:([^\r\n]+)/);
+      if (mMatch) usedMemoryHuman = mMatch[1];
+    } catch {}
+
     return {
       status: 'HEALTHY',
       connected: pong === 'PONG',
       isFallback: false,
       mode: 'DISTRIBUTED_REDIS',
       targetUrl: config.redisUrl,
+      isTls: config.isTls,
+      redisVersion,
+      usedMemoryHuman,
       latencyMs,
       checkedAt: new Date().toISOString(),
     };
