@@ -36,3 +36,7 @@ Thumbs.db
 
 # Temporary Bundler Files
 *.timestamp-*.mjs
+
+# Redis Database Snapshot
+dump.rdb
+*.rdb

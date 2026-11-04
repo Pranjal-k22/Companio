@@ -350,29 +350,68 @@ export async function queueEscalation(flagDoc, options = {}) {
       };
     }
 
-    const job = await addJob(
-      QUEUE_NAMES.CLINICAL_ESCALATION,
-      'clinical-escalation-job',
-      {
-        eventId: eventRecord._id,
-        flagId: flagDoc._id,
-        patientId: flagDoc.patientId,
-        organizationId: flagDoc.organizationId || patient?.organizationId,
-        tier: target.tier || tier,
-        channel: target.channel,
-        correlationId: options.correlationId,
-      },
-      {
-        jobId: `escalation-${eventRecord._id}-1`,
-        priority: 1,
+    let job = null;
+    let enqueueError = null;
+
+    try {
+      job = await addJob(
+        QUEUE_NAMES.CLINICAL_ESCALATION,
+        'clinical-escalation-job',
+        {
+          eventId: eventRecord._id,
+          flagId: flagDoc._id,
+          patientId: flagDoc.patientId,
+          organizationId: flagDoc.organizationId || patient?.organizationId,
+          tier: target.tier || tier,
+          channel: target.channel,
+          correlationId: options.correlationId,
+        },
+        {
+          jobId: `escalation-${eventRecord._id}-1`,
+          priority: 1,
+        }
+      );
+    } catch (err) {
+      enqueueError = err.message;
+      // CRITICAL OUTBOX SAFETY GUARD:
+      // If BullMQ/Redis cannot accept the job (e.g. offline, degraded in production),
+      // we NEVER drop the event. We mark it RETRY_PENDING in MongoDB durable outbox
+      // so the EscalationRetryWorker can safely dispatch it.
+      if (eventRecord._id) {
+        try {
+          await EscalationEvent.findByIdAndUpdate(eventRecord._id, {
+            status: 'RETRY_PENDING',
+            error: `Redis queue unavailable: ${err.message}`,
+            nextRetryAt: new Date(Date.now() + 5000),
+          });
+        } catch (dbErr) {
+          console.warn('[EscalationDispatcher] Error updating outbox status on enqueue failure:', dbErr.message);
+        }
       }
-    );
+    }
 
     queuedEvents.push({
       eventId: eventRecord._id,
-      jobId: job.id,
+      jobId: job ? job.id : null,
       channel: target.channel,
+      status: job ? 'QUEUED' : 'RETRY_PENDING',
+      error: enqueueError,
     });
+  }
+
+  // Ensure Flag is updated to 'escalated' status in MongoDB (Safety Invariant)
+  try {
+    const currentFlag = await Flag.findById(flagDoc._id);
+    if (currentFlag && !['resolved', 'closed', 'false_positive'].includes(currentFlag.status)) {
+      await Flag.findByIdAndUpdate(flagDoc._id, {
+        status: 'escalated',
+        escalatedAt: flagDoc.escalatedAt || new Date(),
+        escalationTier: tier,
+        notifiedVia: 'System Escalation Outbox (BullMQ)',
+      });
+    }
+  } catch (err) {
+    console.warn('[EscalationDispatcher] Error updating flag state:', err.message);
   }
 
   return {

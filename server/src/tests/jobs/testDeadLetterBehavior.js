@@ -44,7 +44,8 @@ export async function testDeadLetterBehavior() {
   // Verify job is recorded in failed / dead-letter state
   const queue = getQueue(queueName);
   const failedJob = await queue.getJob(dlqJobId);
-  assert.strictEqual(failedJob.state, 'failed', 'Job must transition to failed (DLQ) state');
+  const jobState = typeof failedJob.getState === 'function' ? await failedJob.getState() : failedJob.state;
+  assert.strictEqual(jobState, 'failed', 'Job must transition to failed (DLQ) state');
   console.log('  ✔ [PASS] Job transitioned to failed dead-letter state when retries exhausted');
 
   // Verify failed jobs inspection API

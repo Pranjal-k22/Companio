@@ -68,14 +68,24 @@ Companio partitions background workloads across **7 dedicated queues**:
 
 ---
 
-## 3. Resilience & In-Memory Fallback Subsystem
+## 3. Resilience, Production Guardrails & Fallback Governance (Phase 9.1)
 
-Companio guarantees continuous availability across all environments:
-1. **Distributed Production Mode**: When Redis is available (`REDIS_URL` or `localhost:6379`), queues run on BullMQ backed by `ioredis` with distributed locks, atomic Lua script transitions, and horizontal replica coordination.
-2. **Resilient In-Memory Fallback (`InMemoryQueue` & `InMemoryWorker`)**: If Redis is offline, unreachable, or explicitly disabled (`REDIS_FALLBACK=true`), the system automatically switches to an in-process queue adapter that matches BullMQ's API. This ensures:
-   - Local single-node development runs without external Redis dependencies.
-   - CI pipelines and unit test suites execute deterministically in memory.
-   - Application startup never crashes due to Redis network outages.
+Companio enforces strict environment separation and data durability policies:
+
+1. **Distributed Production Mode (`NODE_ENV === 'production'`)**:
+   - Queues run on BullMQ backed by `ioredis` with distributed locks, atomic Lua script transitions, and horizontal replica coordination.
+   - **CRITICAL PRODUCTION GUARDRAIL**: In production, the system **NEVER** silently falls back to ephemeral in-memory queues. Ephemeral in-memory queues vanish on process crash or container restart, which would create silent loss of urgent clinical escalations.
+   - If Redis is unreachable at startup or during execution in production:
+     - The connection status is marked `DEGRADED`.
+     - Non-critical queue additions are rejected with actionable alerts.
+     - Critical clinical escalation events are safely buffered in MongoDB's durable outbox (`EscalationEvent.status = 'RETRY_PENDING'`).
+     - Clinical `Flag` documents strictly remain in `escalated` status.
+     - Telemetry and health checks (`GET /api/v1/admin/queues/health`) immediately report `DEGRADED`.
+
+2. **Resilient In-Memory Fallback (`InMemoryQueue` & `InMemoryWorker`)**:
+   - Explicitly permitted **ONLY** in development and automated testing environments (`NODE_ENV === 'test'` or `ALLOW_IN_MEMORY_FALLBACK=true`).
+   - Implements BullMQ's Queue/Worker API with concurrency control, delay scheduling, retry backoff, and DLQ inspection.
+   - Guarantees fast, dependency-free unit testing and local offline UI prototyping.
 
 ---
 
@@ -106,3 +116,4 @@ Duplicate submissions with active keys are safely deduplicated by BullMQ.
 
 ### 4.5 Clinician Attestation Gate
 Background report generation workers generate reports strictly in `PENDING_REVIEW` status. Reports are **never** automatically approved or published without clinician review and electronic attestation.
+

@@ -76,3 +76,4 @@ export default {
   QUEUE_NAMES,
   QUEUE_CONFIGS,
 };
+

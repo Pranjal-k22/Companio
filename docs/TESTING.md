@@ -14,7 +14,10 @@ Companio enforces strict, multi-layer automated verification with 100% independe
 ## 2. Test Execution Commands
 
 ```bash
-# Phase 9: Distributed Background Jobs (Redis & BullMQ)
+# Phase 9.1: Real Redis Production Verification Suite (Live Redis 8 Required)
+npm run test:redis
+
+# Phase 9: Distributed Background Jobs (BullMQ 7-Worker Architecture & REST APIs)
 npm run test:jobs
 
 # Phase 8: Caregiver & Family Portal Integration
@@ -38,7 +41,17 @@ npm run build:client
 
 ---
 
-## 3. Phase 9 Test Suite Matrix (`npm run test:jobs`)
+## 3. Phase 9.1 Real Redis Master Suite Matrix (`npm run test:redis`)
+
+| Suite File | Scope Verified | Critical Production & Clinical Invariant |
+| :--- | :--- | :--- |
+| `testRealRedisVerification.js` | Live Redis 8 daemon primitives & telemetry | Direct connectivity to Redis 8.10.3, latency telemetry, BullMQ key structure, and worker restart recovery. |
+| `testRealRedisMultiWorker.js` | Multi-worker concurrent child processes | Work shared between independent processes (`worker-alpha`, `worker-beta`), zero duplicates, crash recovery without job loss. |
+| `testRealRedisFailureInjection.js` | 8 critical failure injection scenarios | Production guardrails, Redis disconnection/reconnection, outbox buffering in MongoDB, and Flag preservation. |
+
+---
+
+## 4. Phase 9 Background Jobs Suite Matrix (`npm run test:jobs`)
 
 | Suite File | Scope Verified | Critical Clinical Invariant |
 | :--- | :--- | :--- |
@@ -52,3 +65,4 @@ npm run build:client
 | `testCaregiverNotificationQueue.js`| Permission & consent enforcement | Revoked relationships or missing scopes suppress alerts. |
 | `testTenantIsolation.js` | Organization data partitioning | Cross-tenant queries return null / concealed. |
 | `testQueueAdminRestApis.js` | Queue admin REST endpoints | RBAC enforces 403 Forbidden on non-clinicians. |
+

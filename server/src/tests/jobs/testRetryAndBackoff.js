@@ -46,7 +46,8 @@ export async function testRetryAndBackoff() {
   const queue = getQueue(queueName);
   const completedJob = await queue.getJob(testJobId);
   assert.ok(completedJob, 'Job must exist');
-  assert.strictEqual(completedJob.state, 'completed', 'Job should reach completed state after recovery');
+  const jobState = typeof completedJob.getState === 'function' ? await completedJob.getState() : completedJob.state;
+  assert.strictEqual(jobState, 'completed', 'Job should reach completed state after recovery');
   console.log('  ✔ [PASS] Job successfully recovered and reached completed state');
 
   await worker.close();

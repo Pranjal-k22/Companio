@@ -23,6 +23,7 @@ export async function testRedisConnectionResilience() {
   console.log(`  ✔ [PASS] Redis health check returned valid telemetry: ${health.status} (Mode: ${health.mode || 'FALLBACK'})`);
 
   // Test 3: Set fallback mode and verify behavior
+  const originalFallback = isInFallbackMode();
   setFallbackMode(true);
   assert.strictEqual(isInFallbackMode(), true, 'Fallback mode should be true');
 
@@ -36,6 +37,10 @@ export async function testRedisConnectionResilience() {
   assert.ok(allQueuesHealth.queues['clinical-escalation'], 'clinical-escalation queue must be reported');
   assert.ok(allQueuesHealth.queues['report-generation'], 'report-generation queue must be reported');
   console.log('  ✔ [PASS] Aggregated queue health reports depth and worker counts for all 7 queues');
+
+  // Restore original state
+  setFallbackMode(originalFallback);
 }
 
 export default testRedisConnectionResilience;
+

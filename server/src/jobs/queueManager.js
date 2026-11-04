@@ -6,6 +6,8 @@ import {
   isInFallbackMode,
   setFallbackMode,
   checkRedisHealth,
+  isFallbackPermitted,
+  getConnectionStatus,
 } from './redisConnection.js';
 import { InMemoryQueue, InMemoryWorker } from './inMemoryQueue.js';
 import logger from '../utils/logger.js';
@@ -62,6 +64,9 @@ export function getQueue(queueName) {
   let queueInstance;
 
   if (isInFallbackMode()) {
+    if (!isFallbackPermitted()) {
+      throw new Error(`[QueueManager:Safety] Attempted to instantiate in-memory queue '${queueName}' in production. Ephemeral fallback is prohibited.`);
+    }
     queueInstance = new InMemoryQueue(queueName, queueConfig);
   } else {
     try {
@@ -76,6 +81,10 @@ export function getQueue(queueName) {
         },
       });
     } catch (err) {
+      if (!isFallbackPermitted()) {
+        logger.error(`[QueueManager:CRITICAL] Failed to create Redis queue '${queueName}' in production: ${err.message}. Ephemeral fallback prohibited.`);
+        throw new Error(`[QueueManager:Degraded] Failed to create Redis queue '${queueName}': ${err.message}`);
+      }
       logger.warn(`[QueueManager] Failed to create Redis queue '${queueName}': ${err.message}. Using fallback.`);
       queueInstance = new InMemoryQueue(queueName, queueConfig);
     }
@@ -100,6 +109,9 @@ export function registerWorker(queueName, processor, customOpts = {}) {
   let workerInstance;
 
   if (isInFallbackMode()) {
+    if (!isFallbackPermitted()) {
+      throw new Error(`[QueueManager:Safety] Attempted to instantiate in-memory worker for '${queueName}' in production. Ephemeral fallback is prohibited.`);
+    }
     workerInstance = new InMemoryWorker(queueName, processor, { concurrency });
   } else {
     try {
@@ -126,6 +138,10 @@ export function registerWorker(queueName, processor, customOpts = {}) {
         logger.warn(`[Worker:${queueName}] Worker internal error: ${err.message}`);
       });
     } catch (err) {
+      if (!isFallbackPermitted()) {
+        logger.error(`[QueueManager:CRITICAL] Failed to create Redis worker for '${queueName}' in production: ${err.message}. Ephemeral fallback prohibited.`);
+        throw new Error(`[QueueManager:Degraded] Failed to create Redis worker for '${queueName}': ${err.message}`);
+      }
       logger.warn(`[QueueManager] Failed to create Redis worker for '${queueName}': ${err.message}. Using fallback worker.`);
       workerInstance = new InMemoryWorker(queueName, processor, { concurrency });
     }
@@ -149,6 +165,18 @@ export function registerWorker(queueName, processor, customOpts = {}) {
  * @returns {Promise<object>}
  */
 export async function addJob(queueName, jobName, payload, opts = {}) {
+  if (isInFallbackMode() && !isFallbackPermitted()) {
+    throw new Error(
+      `[QueueManager:Safety] Refusing to enqueue '${jobName}' on '${queueName}': system is in fallback mode but in-memory fallback is strictly prohibited in production.`
+    );
+  }
+
+  if (getConnectionStatus() === 'DEGRADED') {
+    throw new Error(
+      `[QueueManager:Safety] Refusing to enqueue '${jobName}' on '${queueName}': Redis is offline and queue is DEGRADED in production. Critical events remain in durable outbox.`
+    );
+  }
+
   const queue = getQueue(queueName);
   const queueConfig = QUEUE_CONFIGS[queueName] || {};
 
@@ -252,15 +280,18 @@ export async function retryFailedJobs(queueName, count = 50) {
   const q = getQueue(queueName);
   if (!q) return 0;
 
-  if (typeof q.retryJobs === 'function') {
-    return await q.retryJobs(count);
+  if (isInFallbackMode() && q instanceof InMemoryQueue) {
+    if (typeof q.retryJobs === 'function') {
+      return await q.retryJobs(count);
+    }
+    return 0;
   }
 
-  // BullMQ retry logic
+  // BullMQ live Redis retry logic: iterate over failed jobs and revive each
   const failed = await q.getJobs(['failed'], 0, count);
   let retried = 0;
   for (const job of failed) {
-    if (job.retry) {
+    if (typeof job.retry === 'function') {
       await job.retry();
       retried++;
     }
@@ -325,3 +356,4 @@ export default {
   cleanQueue,
   closeAllQueuesAndWorkers,
 };
+

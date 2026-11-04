@@ -48,5 +48,22 @@ NODE_ENV=production WORKER_ONLY=true node server/src/jobs/workerBootstrap.js
 ## 4. Graceful Shutdown & Disaster Recovery
 
 - **Worker Drain Window**: Workers stop dequeuing new jobs upon receiving `SIGTERM` and allow up to 10 seconds for active jobs to finish.
-- **Stalled Job Recovery**: BullMQ automatically moves jobs from stalled workers back to `waiting` state if a container crashes abruptly.
-- **Redis Outage Resilience**: If Redis connectivity is lost, the connection manager attempts exponential reconnection up to 3 times before activating in-memory fallback.
+- **Stalled Job Recovery**: BullMQ automatically detects stalled locks (default 2000ms duration, 1000ms check interval) and moves jobs from crashed worker instances back to `waiting` state for surviving workers to claim without job loss.
+- **Production Redis Outage Guardrail**:
+  - In production (`NODE_ENV=production`), the system **NEVER** silently falls back to ephemeral in-memory queues.
+  - Ephemeral queues vanish on container restart and create silent data loss for urgent clinical escalations.
+  - If Redis is unreachable, `initRedisConnection()` marks the queue subsystem as `DEGRADED`.
+  - Enqueue attempts for critical clinical alerts are preserved safely in MongoDB's durable outbox (`EscalationEvent.status = 'RETRY_PENDING'`).
+  - The `EscalationRetryWorker` automatically processes pending outbox events once Redis connectivity is re-established or dispatches them directly via fallback channels.
+  - Under no circumstances is a clinical `Flag` ever resolved, downgraded, or deleted due to queue or notification delivery failure.
+
+---
+
+## 5. Multi-Worker Cluster Verification (Phase 9.1)
+
+Companio Phase 9.1 verified distributed multi-worker execution against a real Redis 8 instance:
+- **Independent Worker Child Processes**: Verified work is shared concurrently across separate worker processes (`worker-alpha`, `worker-beta`).
+- **Atomic Deduplication**: Evaluated across worker processes using deterministic custom job IDs (`jobId`), ensuring zero double-execution.
+- **Crash Recovery**: Verified that killing a worker mid-execution results in the surviving worker reclaiming and completing the job.
+- **Dead-Letter Management**: Failed jobs transition to BullMQ's failed state, capture full error stack traces, and are retriable via REST API or admin sweep.
+

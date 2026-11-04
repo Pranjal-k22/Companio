@@ -60,3 +60,4 @@ export async function processReportGenerationJob(job) {
 export default {
   processReportGenerationJob,
 };
+

@@ -55,3 +55,4 @@ export async function processEmailNotificationJob(job) {
 export default {
   processEmailNotificationJob,
 };
+

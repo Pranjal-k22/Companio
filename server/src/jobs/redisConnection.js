@@ -7,6 +7,20 @@ let isFallbackMode = false;
 let lastError = null;
 
 /**
+ * Determines whether in-memory fallback is permitted in the current environment.
+ * CRITICAL SAFETY GUARD: In production (NODE_ENV === 'production'), in-memory
+ * fallback is strictly forbidden unless explicitly enabled by ALLOW_IN_MEMORY_FALLBACK=true.
+ * Ephemeral in-memory queues vanish on restart and must NEVER silently drop critical clinical alerts.
+ */
+export function isFallbackPermitted() {
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (isProduction) {
+    return process.env.ALLOW_IN_MEMORY_FALLBACK === 'true';
+  }
+  return true;
+}
+
+/**
  * Returns connection configuration options for ioredis and BullMQ.
  * BullMQ requires maxRetriesPerRequest to be null on Redis clients.
  */
@@ -23,7 +37,7 @@ export function getRedisConfig() {
       connectTimeout: 2000,
       retryStrategy(times) {
         if (times > 3) {
-          // After 3 attempts, avoid spamming logs and allow fallback mode
+          // After 3 attempts, avoid spamming logs and allow fallback mode if permitted
           return null;
         }
         return Math.min(times * 500, 2000);
@@ -65,8 +79,16 @@ export function createRedisConnection(customOptions = {}) {
  */
 export async function initRedisConnection() {
   const config = getRedisConfig();
+  const fallbackAllowed = isFallbackPermitted();
 
   if (config.forceFallback) {
+    if (!fallbackAllowed) {
+      logger.error('[Redis:SECURITY] Force fallback requested in production without ALLOW_IN_MEMORY_FALLBACK=true. Queue system marked DEGRADED.');
+      isFallbackMode = false;
+      connectionStatus = 'DEGRADED';
+      lastError = 'In-memory fallback forbidden in production';
+      return { isFallback: false, client: null, status: connectionStatus, error: lastError };
+    }
     logger.info('[Redis] Force fallback configured via REDIS_FALLBACK=true.');
     isFallbackMode = true;
     connectionStatus = 'FALLBACK';
@@ -74,9 +96,10 @@ export async function initRedisConnection() {
   }
 
   connectionStatus = 'CONNECTING';
+  let client = null;
 
   try {
-    const client = createRedisConnection();
+    client = createRedisConnection();
     // Test connection with timeout
     const connectPromise = client.connect();
     const timeoutPromise = new Promise((_, reject) =>
@@ -89,14 +112,27 @@ export async function initRedisConnection() {
     sharedRedisClient = client;
     connectionStatus = 'CONNECTED';
     isFallbackMode = false;
-    logger.info('[Redis] Successfully connected to Redis instance at ' + config.redisUrl);
+    logger.info('[Redis] Successfully connected to live Redis instance at ' + config.redisUrl);
 
     return { isFallback: false, client: sharedRedisClient, status: connectionStatus };
   } catch (err) {
+    if (client) {
+      try {
+        client.disconnect();
+      } catch {}
+    }
     lastError = err.message;
+    if (!fallbackAllowed) {
+      connectionStatus = 'DEGRADED';
+      isFallbackMode = false;
+      sharedRedisClient = null;
+      logger.error(`[Redis:CRITICAL] Live Redis unavailable in production (${err.message}). Ephemeral fallback prohibited. Critical events remain safely in MongoDB durable outbox.`);
+      return { isFallback: false, client: null, status: connectionStatus, error: err.message };
+    }
+
     connectionStatus = 'FALLBACK';
     isFallbackMode = true;
-    logger.warn('[Redis] Live Redis unavailable (' + err.message + '). Activating resilient in-memory fallback queue engine.');
+    logger.warn('[Redis] Live Redis unavailable (' + err.message + '). Activating resilient in-memory fallback queue engine for dev/test.');
 
     return { isFallback: true, client: null, status: connectionStatus };
   }
@@ -107,6 +143,13 @@ export async function initRedisConnection() {
  */
 export function isInFallbackMode() {
   return isFallbackMode;
+}
+
+/**
+ * Returns current Redis connection status ('CONNECTED' | 'FALLBACK' | 'DEGRADED' | 'DISCONNECTED' | 'CONNECTING')
+ */
+export function getConnectionStatus() {
+  return connectionStatus;
 }
 
 /**
@@ -125,13 +168,26 @@ export function setFallbackMode(fallback) {
 export async function checkRedisHealth() {
   const startTime = Date.now();
   const config = getRedisConfig();
+  const fallbackAllowed = isFallbackPermitted();
+
+  if (connectionStatus === 'DEGRADED' || (!sharedRedisClient && !isFallbackMode)) {
+    return {
+      status: 'DEGRADED',
+      connected: false,
+      isFallback: false,
+      mode: 'DEGRADED_OUTBOX_PRESERVED',
+      targetUrl: config.redisUrl,
+      lastError: lastError || 'Live Redis unreachable in production. Ephemeral fallback prohibited.',
+      checkedAt: new Date().toISOString(),
+    };
+  }
 
   if (isFallbackMode || !sharedRedisClient) {
     return {
-      status: 'FALLBACK_ACTIVE',
+      status: fallbackAllowed ? 'FALLBACK_ACTIVE' : 'DEGRADED',
       connected: false,
-      isFallback: true,
-      mode: 'IN_MEMORY_RESILIENT',
+      isFallback: fallbackAllowed,
+      mode: fallbackAllowed ? 'IN_MEMORY_RESILIENT' : 'DEGRADED_OUTBOX_PRESERVED',
       targetUrl: config.redisUrl,
       lastError: lastError || 'Redis not connected or fallback forced',
       checkedAt: new Date().toISOString(),
@@ -155,7 +211,7 @@ export async function checkRedisHealth() {
     return {
       status: 'DEGRADED',
       connected: false,
-      isFallback: true,
+      isFallback: isFallbackMode,
       lastError: err.message,
       checkedAt: new Date().toISOString(),
     };
@@ -178,11 +234,14 @@ export async function closeRedisConnections() {
 }
 
 export default {
+  isFallbackPermitted,
   getRedisConfig,
   createRedisConnection,
   initRedisConnection,
   isInFallbackMode,
+  getConnectionStatus,
   setFallbackMode,
   checkRedisHealth,
   closeRedisConnections,
 };
+

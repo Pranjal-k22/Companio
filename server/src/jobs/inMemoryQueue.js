@@ -57,6 +57,9 @@ export class InMemoryQueue extends EventEmitter {
       stacktrace: [],
       returnvalue: null,
       // Helper methods to match BullMQ Job API
+      async getState() {
+        return this.state;
+      },
       async updateData(newData) {
         this.data = Object.freeze({ ...newData });
       },
@@ -255,3 +258,4 @@ export default {
   InMemoryQueue,
   InMemoryWorker,
 };
+
