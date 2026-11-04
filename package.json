@@ -16,6 +16,7 @@
     "test:jobs": "node server/src/testBackgroundJobsMaster.js",
     "test:redis": "node server/src/testRealRedisMaster.js",
     "test:operations": "node server/src/tests/operations/testPhase10Operations.js",
+    "test:drill": "node server/src/tests/operations/testBackupRestoreDrill.js",
     "install:all": "npm install && npm install --prefix server && npm install --prefix client",
     "build:client": "npm run build --prefix client"
   },

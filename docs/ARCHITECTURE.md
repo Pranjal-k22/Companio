@@ -1,7 +1,7 @@
 # 🏛️ Companio — System Architecture & Engineering Blueprint
 
 **Document Reference**: `docs/ARCHITECTURE.md`  
-**Current Milestone**: Phase 10 (Enterprise Operations, Observability & Release Gates A–E)  
+**Current Milestone**: Phase 11 (Independent Security, Privacy, Compliance & Clinical Readiness Assessment)  
 **Repository Baseline**: `main`
 
 ---
@@ -406,6 +406,31 @@ Companio implements a formal 5-gate operational gating matrix:
 - **Gate C (Operational Reliability)**: MongoDB durable outbox reconciler (`outboxReconciler.js`) sweeping stuck or orphaned `QUEUED` / `RETRY_PENDING` escalation events back into BullMQ. Clinical flag preservation invariant strictly preserved.
 - **Gate D (Security & Access Control)**: IP rate limiting on auth and general REST endpoints (`rateLimiter.js`), privileged administrative access controls on queue management endpoints with permanent MongoDB audit safeguards (`auditPreserved: true`).
 - **Gate E (Release Validation & Gating)**: Concurrency throughput verification (50 concurrent requests in <60ms), queue concurrency stress simulation on live Redis, database snapshot reconciliation, and 9 operational disaster recovery runbooks.
+
+---
+
+## 17. Independent Security, Privacy, Compliance & Clinical Readiness (Phase 11)
+
+### 17.1 Security Architecture & STRIDE Threat Modeling
+Companio enforces defense-in-depth across 10 architectural trust boundaries (Patient, Caregiver, Clinician, Admin, REST Gateway, Voice Gateway, Workers, MongoDB, Redis, Third-Party Providers).
+- CORS policy hardened with dynamic environment allowlists (`CORS_ORIGIN`).
+- Bearer JWT authentication with database profile validation.
+- Zero raw audio retention (`AUDIO_RETENTION_MODE: disabled`).
+- Rate-limited auth and API surfaces.
+
+### 17.2 Data Governance & Privacy Invariants
+12 clinical data categories are inventoried with explicit retention and erasure rules.
+- Queue payloads are minimized to non-sensitive ObjectIds and correlation tokens.
+- Real-time consent withdrawal terminates active voice sessions within 50ms and destroys transient memory buffers.
+- Cryptographic provenance (SHA-256) on clinical reports ensures tamper-evidence.
+
+### 17.3 Clinical Hazard Register & Safety Boundaries
+Companio aligns with ISO 14971 medical device risk management standards:
+- Clear non-diagnostic, non-prescriptive boundary strictly preserved.
+- Parallel deterministic safety net (13 RED, 10 YELLOW taxonomy categories) with clause segmentation, negation handling, and historical context analysis.
+- Durable safety net: Failed external notification delivery never downgrades or resolves clinical flags.
+- Retrospective clinical reports require human clinician attestation before publication.
+
 
 
 

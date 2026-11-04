@@ -14,6 +14,9 @@ Companio enforces strict, multi-layer automated verification with 100% independe
 ## 2. Test Execution Commands
 
 ```bash
+# Phase 11: Real Backup & Restore Verification Drill
+npm run test:drill
+
 # Phase 10: Enterprise Operations, Observability & Release Gates A–E
 npm run test:operations
 

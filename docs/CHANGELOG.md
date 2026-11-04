@@ -5,6 +5,22 @@ All notable changes to the Companio healthcare platform will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-11-04
+
+### Added
+- **Independent Security & Privacy Assessment**: Completed exhaustive 18-dimension security review and OWASP Top 10 compliance audit (`docs/PHASE_11_SECURITY_ASSESSMENT.md`).
+- **STRIDE System Threat Model**: Detailed threat model across 10 architectural trust boundaries (`docs/PHASE_11_THREAT_MODEL.md`).
+- **Healthcare Data Governance & PHI Inventory**: 12-category data lifecycle map documenting storage, access, retention, and third-party flows (`docs/PHASE_11_PRIVACY_DATA_MAP.md`).
+- **Clinical Hazard Register**: ISO 14971-aligned clinical hazard register assessing 9 hazards, causes, harms, and mitigations (`docs/PHASE_11_CLINICAL_HAZARD_REGISTER.md`).
+- **Third-Party Provider Verification Matrix**: Audited AssemblyAI, Google Gemini, ElevenLabs, Twilio, and Resend with explicit BAA requirements (`docs/PHASE_11_PROVIDER_VERIFICATION.md`).
+- **Third-Party Penetration Test Plan**: OWASP ASVS Level 2 scope and scenario plan for external pen testing (`docs/PHASE_11_PENETRATION_TEST_PLAN.md`).
+- **Automated Backup & Restore Drill**: Executable snapshot restoration test script (`testBackupRestoreDrill.js`) restoring 967 documents with 100% SHA-256 bit parity (`docs/PHASE_11_BACKUP_RESTORE_VALIDATION.md`).
+- **Senior Accessibility & Remediation Plan**: P0–P3 prioritized remediation register and real-device testing protocol for older adults (`docs/PHASE_11_REMEDIATION_PLAN.md`).
+
+### Changed
+- **Hardened CORS Configuration**: Updated `server/src/server.js` to restrict origins dynamically using `CORS_ORIGIN` environment allowlists in production, eliminating the development wildcard.
+- **Package Scripts**: Added `test:drill` script to root `package.json` for running the automated MongoDB backup and restore drill.
+
 ## [1.10.0] - 2026-11-04
 
 ### Added
