@@ -3,7 +3,7 @@
 **Document Reference**: `docs/IMPLEMENTATION_ROADMAP.md`  
 **Target Architecture**: Modular Monolith + Dedicated Voice Gateway + Distributed Worker  
 **Product**: AI Voice-First Health & Wellness Platform for Adults 55+  
-**Current Phase**: Phase 12 Complete (Controlled Pilot, End-to-End Validation & Production Launch Readiness)  
+**Current Phase**: Phase 12.1 Complete (External Validation, Human Factors Testing & Controlled Pilot Authorization)  
 **Execution Philosophy**: Small verified increments; zero disruption to working code; preserve existing route compatibility.
 
 ---
@@ -11,9 +11,9 @@
 ## Roadmap Overview
 
 ```
-Phase 0 [DONE] ──► ... ──► Phase 10 [DONE] ──► Phase 11 [DONE] ──► Phase 12 [DONE]
-Baseline Audit             Enterprise Ops       Security, Privacy & Controlled Pilot &
-                           & Release Gates      Clinical Assessment Launch Readiness (Stop Gate)
+Phase 0 [DONE] ──► ... ──► Phase 11 [DONE] ──► Phase 12 [DONE] ──► Phase 12.1 [DONE]
+Baseline Audit             Security, Privacy & Controlled Pilot &   External Validation,
+                           Clinical Assessment Launch Readiness     Human Factors & Pilot Auth
 ```
 
 ---
@@ -239,6 +239,22 @@ Baseline Audit             Enterprise Ops       Security, Privacy & Controlled P
   - Production Launch Readiness Matrix (`docs/PHASE_12_PRODUCTION_READINESS_MATRIX.md`): Domain-by-domain evaluation; Go for synthetic, Conditional Go for tablet pilot, No-Go for commercial production pending BAAs.
   - Phase Completion Report (`docs/PHASE_12_COMPLETION_REPORT.md`, `COMPANIO_PHASE_12_COMPLETION_REPORT.md`).
 * **Exit Criteria**: 100% of Phase 12 deliverables complete; master synthetic pilot suite (43/43 checks) passing; password recovery suite (10/10 checks) passing; all regression suites (Phases 4–11) passing; STOP GATE enforced (awaiting explicit authorization before deployment). (Met on 2026-11-04)
+
+---
+
+## Phase 12.1: External Validation, Human Factors Testing & Controlled Pilot Authorization (Status: ✅ COMPLETED)
+* **Goal**: Coordinate external validation activities, statutory provider contract analysis, external penetration test scoping, clinical advisory board approval packaging, human research ethics (IRB) review, consolidated risk management, and formal four-tier release gating.
+* **Deliverables**:
+  - Baseline Audit (`docs/PHASE_12_1_BASELINE_AUDIT.md`): Pre-implementation audit and reconciliation of software vs regulatory claims.
+  - Provider Contract Register (`docs/PHASE_12_1_PROVIDER_CONTRACT_REGISTER.md`): Exhaustive statutory audit of AssemblyAI, Google Cloud, ElevenLabs, Twilio, and Resend; BAA requirement register; Pilot Safe De-Identification Alternative Architecture.
+  - Penetration Testing Scope (`docs/PHASE_12_1_PENETRATION_TEST_SCOPE.md`): External testing charter covering 12 threat surfaces, rules of engagement, CVSS v3.1 scoring, and accredited assessor standard.
+  - Clinical Approval Register (`docs/PHASE_12_1_CLINICAL_APPROVAL_REGISTER.md`): 13 RED + 10 YELLOW clinical package, negation handling, and medical advisory board sign-off register.
+  - Human Factors Results (`docs/PHASE_12_1_HUMAN_FACTORS_RESULTS.md`): WCAG 2.1 AA lab baseline, IRB Protocol `#COMPANIO-PILOT-2026-HFE` governance, and recruitment halt pending ethics approval.
+  - Consolidated Risk & Remediation Register (`docs/PHASE_12_1_RISK_REMEDIATION_REGISTER.md`): Unified risk tracking across 7 domains with assigned owners and remediation milestones.
+  - Final Readiness Assessment (`docs/PHASE_12_1_FINAL_READINESS_ASSESSMENT.md`): Requirement-by-requirement audit matrix and four decoupled release gates (Tier A: Pass, Tier B: Conditional Go, Tier C: Blocked, Tier D: No-Go).
+  - Phase Completion Report (`docs/PHASE_12_1_COMPLETION_REPORT.md`, `COMPANIO_PHASE_12_1_COMPLETION_REPORT.md`).
+* **Exit Criteria**: All 8 Phase 12.1 deliverables complete; four-tier gating formalization active; STOP GATE enforced (awaiting written external approvals before human participant recruitment, clinical pilot, or production deployment). (Met on 2026-11-04)
+
 
 
 

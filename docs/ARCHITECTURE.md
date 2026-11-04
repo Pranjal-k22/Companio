@@ -1,7 +1,7 @@
 # 🏛️ Companio — System Architecture & Engineering Blueprint
 
 **Document Reference**: `docs/ARCHITECTURE.md`  
-**Current Milestone**: Phase 12 (Controlled Pilot, End-to-End Validation & Production Launch Readiness)  
+**Current Milestone**: Phase 12.1 (External Validation, Human Factors Testing & Controlled Pilot Authorization)  
 **Repository Baseline**: `main`
 
 ---
@@ -455,6 +455,24 @@ Companio aligns with ISO 14971 medical device risk management standards:
 ### 18.4 External Provider BAA Governance & Release Stop Gate
 - **HIPAA BAA Requirement**: External cloud AI and telephony services (AssemblyAI, Google Gemini, ElevenLabs, Twilio, Resend) are technically integrated but formally marked **BLOCKED** pending execution of legal Business Associate Agreements.
 - **Formal Stop Gate**: General commercial deployment to real patient cohorts is strictly prohibited until BAAs are executed. Controlled usability testing is authorized under IRB / Quality Improvement protocol using de-identified test tablets.
+
+### 18.5 Pilot Safe Alternative De-Identification Architecture (Phase 12.1)
+Where commercial BAAs are unavailable or pending, Companio enforces an architectural safe alternative:
+- **Speech-to-Text (STT)**: De-identified session tokens (`PILOT-01` through `PILOT-15`), simulated scripted audio, or self-hosted containerized `faster-whisper-server` (zero outbound packets).
+- **Dialogue & Extraction (LLM)**: Automated regex and NER scrubbing removing names, dates, addresses, and phone numbers (`[PATIENT]`, `[DATE]`, `[AGE]`) before prompt dispatch; or fallback to deterministic code rule engines (`TEMPLATE_FALLBACK`).
+- **Text-to-Speech (TTS)**: Generic clinical prompt templates omitting patient names or local synthesis via Piper Neural TTS / browser Web Speech API.
+- **Emergency Notifications (SMS & Email)**: Tokenized alert payloads with zero clinical condition or patient name (e.g. *"Priority Alert #8921 awaiting review in authenticated portal"*).
+
+---
+
+## 19. External Validation & Four-Tier Release Governance Framework (Phase 12.1)
+
+Companio enforces strict separation between software correctness, ethical usability research, clinical medical oversight, and commercial release:
+- **Tier A (Synthetic Engineering Validation)**: Automated test harnesses (43 pilot checks, 10 recovery checks, 1058-doc restore drill, 5 ops gates, 8 redis scenarios, 7 background queues, 10 caregiver modules, 11 reporting suites, 77 dialogue checks, 9 safety suites, 8 voice gateway suites). Status: **PASS (100%)**.
+- **Tier B (Restricted Human Usability Pilot)**: 15-participant senior study on physical tablets. Status: **CONDITIONAL GO (Gated pending written IRB approval under Protocol #COMPANIO-PILOT-2026-HFE)**. Human recruitment strictly halted until ethics clearance.
+- **Tier C (Controlled Clinical Pilot)**: Patient healthcare cohort monitoring in clinical partner sites. Status: **BLOCKED / GATED (Pending Tier B completion and formal countersignature by Clinical Advisory Board on 13 RED + 10 YELLOW taxonomy)**.
+- **Tier D (Commercial Production Launch)**: Unrestricted public production deployment. Status: **NO-GO / BLOCKED (Statutory requirement under HIPAA for executed vendor BAAs and independent CREST penetration test certification)**.
+
 
 
 

@@ -5,6 +5,20 @@ All notable changes to the Companio healthcare platform will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.1] - 2026-11-04
+
+### Added
+- **Provider & Contractual Readiness Register**: Authored `docs/PHASE_12_1_PROVIDER_CONTRACT_REGISTER.md` auditing AssemblyAI, Google Cloud (Gemini), ElevenLabs, Twilio, and Resend. Formally classified all 5 vendors as `BLOCKED` for live production PHI due to the absence of signed HIPAA BAAs. Architected the **Pilot Safe Alternative Architecture** (Zero-PHI tokenized SMS/Email, local regex/NER de-identification proxy, local Whisper/TTS, and deterministic report narration).
+- **Independent Penetration Testing Charter**: Authored `docs/PHASE_12_1_PENETRATION_TEST_SCOPE.md` covering 12 distinct functional attack surfaces (Auth, session kill, multi-tenancy, patient records, caregiver RBAC, REST APIs, Socket.IO voice gateway, Redis engine, BullMQ queues, admin endpoints, PDF export, and rate limiting). Mandated CREST/SOC2 accredited assessor qualifications and established CVSS v3.1 SLAs.
+- **Clinical Governance & Approval Package**: Authored `docs/PHASE_12_1_CLINICAL_APPROVAL_REGISTER.md` packaging the 13 RED + 10 YELLOW clinical taxonomy rules, multi-clause negation handling, and emergency guidance for Medical Advisory Board review. Enforced zero autonomous diagnosis/prescribing and zero autonomous rule changes.
+- **Human Factors Usability Governance**: Authored `docs/PHASE_12_1_HUMAN_FACTORS_RESULTS.md` documenting laboratory bench verification of WCAG 2.1 AA standards (48px touch targets, 15.2:1+ contrast, voice controls). Documented submission of Protocol `#COMPANIO-PILOT-2026-HFE` to the Institutional Review Board (IRB) and formally halted live human participant recruitment pending written ethics approval.
+- **Consolidated Risk & Remediation Register**: Authored `docs/PHASE_12_1_RISK_REMEDIATION_REGISTER.md` unifying risk tracking across Security, Privacy, Clinical Safety, Provider Contracts, Accessibility, Infrastructure, and Operations. Prioritized 4 open gating items (PRIV-01, SEC-01, CLIN-01, ACC-01).
+- **Final Readiness Assessment & Four-Tier Release Gating**: Authored `docs/PHASE_12_1_FINAL_READINESS_ASSESSMENT.md` decoupling release determinations into Tier A (Synthetic Validation: PASS), Tier B (Restricted Usability Pilot: CONDITIONAL GO pending IRB approval), Tier C (Clinical Pilot: BLOCKED pending Medical Board sign-off), and Tier D (Commercial Production: NO-GO / BLOCKED pending BAAs and external pentest).
+- **Pre-Implementation Baseline Audit**: Authored `docs/PHASE_12_1_BASELINE_AUDIT.md` verifying commit `450fca1` and reconciling software completion claims against external regulatory requirements.
+
+### Changed
+- **Production Readiness Matrix**: Updated `docs/PHASE_12_PRODUCTION_READINESS_MATRIX.md` to reflect the Four Decoupled Gating Decisions and five standardized classifications (PASS, FAIL, BLOCKED, NOT VERIFIED, NOT APPLICABLE).
+
 ## [1.12.0] - 2026-11-04
 
 ### Added
