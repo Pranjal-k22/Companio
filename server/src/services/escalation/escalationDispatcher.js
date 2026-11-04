@@ -6,6 +6,7 @@ import { User } from '../../models/User.js';
 import { Organization } from '../../models/Organization.js';
 import { EscalationEvent } from '../../models/EscalationEvent.js';
 import { resolveEscalationRecipients, calculateRetryDelay } from './escalationPolicyEngine.js';
+import { createZeroPhiNotificationPayload, isZeroPhiModeEnabled } from '../privacy/deidentificationService.js';
 
 // Category translator
 const CATEGORY_LABELS = {
@@ -56,11 +57,24 @@ export async function dispatchSingleEvent(eventDoc, context = {}) {
     if (enableSMS && twilioSid && twilioToken && twilioFrom && !eventDoc.mock) {
       try {
         const client = twilio(twilioSid, twilioToken);
-        const smsBody = `🚨 COMPANIO [TIER ${eventDoc.tier || 1}] ALERT
+        const isZeroPhi = isZeroPhiModeEnabled();
+        let smsBody = '';
+        if (isZeroPhi) {
+          const zeroPayload = createZeroPhiNotificationPayload({
+            eventDoc,
+            flag,
+            patient,
+            detailUrl,
+            channel: 'SMS',
+          });
+          smsBody = zeroPayload.body;
+        } else {
+          smsBody = `🚨 COMPANIO [TIER ${eventDoc.tier || 1}] ALERT
 Patient: ${patientName}
 Concern: ${categoryLabel}
 Time: ${timestampStr}
 Review: ${detailUrl || 'Dashboard'}`;
+        }
 
         const msg = await client.messages.create({
           body: smsBody,
@@ -87,8 +101,23 @@ Review: ${detailUrl || 'Dashboard'}`;
     if (enableEmail && resendApiKey && !resendApiKey.includes('your_') && !eventDoc.mock) {
       try {
         const resend = new Resend(resendApiKey);
-        const emailSubject = `🚨 [URGENT TIER-${eventDoc.tier || 1} ALERT] ${patientName} - ${categoryLabel}`;
-        const emailHtml = `
+        const isZeroPhi = isZeroPhiModeEnabled();
+        let emailSubject = '';
+        let emailHtml = '';
+
+        if (isZeroPhi) {
+          const zeroPayload = createZeroPhiNotificationPayload({
+            eventDoc,
+            flag,
+            patient,
+            detailUrl,
+            channel: 'EMAIL',
+          });
+          emailSubject = zeroPayload.subject;
+          emailHtml = zeroPayload.html;
+        } else {
+          emailSubject = `🚨 [URGENT TIER-${eventDoc.tier || 1} ALERT] ${patientName} - ${categoryLabel}`;
+          emailHtml = `
           <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #0f172a; color: #f8fafc; border-radius: 12px;">
             <h2 style="color: #ef4444; margin-top: 0;">🚨 COMPANIO CLINICAL ALERT (TIER ${eventDoc.tier || 1})</h2>
             <p style="font-size: 16px; color: #e2e8f0;">
@@ -107,6 +136,7 @@ Review: ${detailUrl || 'Dashboard'}`;
             </div>
           </div>
         `;
+        }
 
         const { data, error } = await resend.emails.send({
           from: 'Companio Alerts <onboarding@resend.dev>',

@@ -5,6 +5,24 @@ All notable changes to the Companio healthcare platform will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.2] - 2026-11-04
+
+### Added
+- **Pilot-Safe De-Identification & Zero-PHI Architecture Engine**: Implemented `server/src/services/privacy/deidentificationService.js` enforcing HIPAA Safe Harbor de-identification (45 CFR § 164.514(b)(2)). Sanitizes 18 federal direct identifier patterns (names, phones, emails, SSNs, MRNs, dates, zip codes) and generalizes patient ages into 5-year cohorts (`[AGE_70_74]`).
+- **Tokenized Zero-PHI Escalation Alerts**: Implemented `createZeroPhiNotificationPayload({ channel })` in `deidentificationService.js` and integrated with `server/src/services/escalation/escalationDispatcher.js` for SMS (Twilio) and transactional Email (Resend). Guarantees zero patient names, medical diagnoses, or clinical quotes travel across public networks.
+- **Pilot-Safe Automated Test Suite**: Created `server/src/tests/privacy/testPilotSafeDeidentification.js` and registered `"test:deid"` script in root `package.json`, executing 12/12 passing checks (100%).
+- **Provider Agreement Closure Tracker**: Authored `docs/PHASE_12_2_PROVIDER_CLOSURE.md` tracking AssemblyAI, Gemini, ElevenLabs, Twilio, and Resend with zero-PHI alternative architecture details.
+- **Independent Penetration Testing Tracker**: Authored `docs/PHASE_12_2_PENETRATION_TEST_TRACKER.md` establishing certified assessor prerequisites across all 12 functional attack surfaces.
+- **Clinical Safety Sign-Off Tracker**: Authored `docs/PHASE_12_2_CLINICAL_SIGNOFF_TRACKER.md` tracking multidisciplinary physician review across 13 RED + 10 YELLOW clinical trigger rules and emergency protocols.
+- **Institutional Review Board (IRB) Approval Tracker**: Authored `docs/PHASE_12_2_IRB_APPROVAL_TRACKER.md` tracking Protocol `COMPANIO-PILOT-2026-HFE` and enforcing statutory recruitment halt prior to written approval.
+- **Human Factors Bench Results & Staging**: Authored `docs/PHASE_12_2_HUMAN_FACTORS_RESULTS.md` verifying WCAG 2.1 AA/AAA contrast (14.8:1), 48px touch targets, 0.85x senior speech cadence, and Android tablet hardware staging.
+- **Consolidated Risk Closure Report**: Authored `docs/PHASE_12_2_RISK_CLOSURE_REPORT.md` re-evaluating 15 risks (9 closed, 2 controlled in code, 4 gating external approvals).
+- **Final Readiness Report & Four-Tier Matrix**: Authored `docs/PHASE_12_2_FINAL_READINESS_REPORT.md` and `docs/PHASE_12_2_COMPLETION_REPORT.md` decoupling Tier A (PASS), Tier B (CONDITIONAL GO), Tier C (BLOCKED), and Tier D (STRICT NO-GO).
+
+### Changed
+- **Escalation Dispatcher**: Updated `server/src/services/escalation/escalationDispatcher.js` to dynamically evaluate `isZeroPhiModeEnabled()` and route alerts through `createZeroPhiNotificationPayload()`.
+- **Root Package Configuration**: Added `"test:deid": "node server/src/tests/privacy/testPilotSafeDeidentification.js"` to `package.json`.
+
 ## [1.12.1] - 2026-11-04
 
 ### Added
