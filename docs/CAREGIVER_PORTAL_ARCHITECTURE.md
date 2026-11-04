@@ -156,3 +156,4 @@ An immutable, append-only security log recording every interaction between a car
 | **Emergency Safety Net** | `checkTranscriptForRedFlags` auto-creates RED Flag | `testCaregiverConcern.js` |
 | **PHI Minimization** | Caregiver notifications omit drug names and diagnoses | `testCaregiverNotifications.js` |
 | **Tamper-Evident Audit** | Mongoose pre-update rejection hooks on `CaregiverAccessEvent` | `testCaregiverAudit.js` |
+

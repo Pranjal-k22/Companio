@@ -70,3 +70,4 @@ Patient autonomy mandates that any permission can be revoked instantly. In `Pati
 3. **Audit Event Appended**:
    - An immutable event (`eventType: 'ACCESS_REVOKED'`) is saved to `CaregiverAccessEvent`.
    - Dispatched care alerts and notifications are suppressed immediately.
+

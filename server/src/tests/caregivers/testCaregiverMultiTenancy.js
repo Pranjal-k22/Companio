@@ -118,3 +118,4 @@ export async function runCaregiverMultiTenancyTests() {
 
   console.log('  ✔ [PASS] Multi-Caregiver Isolation: Distinct scopes enforced without permission leakage');
 }
+

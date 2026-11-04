@@ -161,4 +161,78 @@ export function initWeeklyReportCron() {
   console.log('✔ [Cron Scheduler] Weekly Clinical Report Worker active.');
 }
 
-export default { runWeeklyReportBatch, initWeeklyReportCron };
+/**
+ * Enqueues a single clinical report generation job to the distributed queue.
+ */
+export async function enqueueReportGenerationJob(patientId, periodStart, periodEnd, options = {}) {
+  const { addJob } = await import('./queueManager.js');
+  const { QUEUE_NAMES } = await import('./queueConfig.js');
+
+  const startStr = (periodStart || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+  const endStr = (periodEnd || new Date()).toISOString().split('T')[0];
+
+  return await addJob(
+    QUEUE_NAMES.REPORT_GENERATION,
+    'generate-clinical-report',
+    {
+      patientId,
+      organizationId: options.organizationId,
+      periodStart,
+      periodEnd,
+      correlationId: options.correlationId,
+    },
+    {
+      jobId: `report-${patientId}-${startStr}-${endStr}`,
+      priority: 5,
+    }
+  );
+}
+
+/**
+ * Enqueues batch report jobs for all active patients in an organization.
+ */
+export async function enqueueWeeklyReportBatch(options = {}) {
+  const { addJob } = await import('./queueManager.js');
+  const { QUEUE_NAMES } = await import('./queueConfig.js');
+
+  const periodEnd = options.periodEnd || new Date();
+  const periodStart = options.periodStart || new Date(periodEnd.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const startStr = periodStart.toISOString().split('T')[0];
+  const endStr = periodEnd.toISOString().split('T')[0];
+
+  const query = options.organizationId ? { organizationId: options.organizationId } : {};
+  const patients = await Patient.find(query).select('_id organizationId');
+
+  const enqueued = [];
+  for (const patient of patients) {
+    const job = await addJob(
+      QUEUE_NAMES.REPORT_GENERATION,
+      'generate-clinical-report',
+      {
+        patientId: patient._id,
+        organizationId: patient.organizationId || options.organizationId,
+        periodStart,
+        periodEnd,
+        correlationId: options.correlationId,
+      },
+      {
+        jobId: `report-${patient._id}-${startStr}-${endStr}`,
+      }
+    );
+    enqueued.push(job.id);
+  }
+
+  return {
+    totalEnqueued: enqueued.length,
+    periodStart,
+    periodEnd,
+    jobIds: enqueued,
+  };
+}
+
+export default {
+  runWeeklyReportBatch,
+  initWeeklyReportCron,
+  enqueueReportGenerationJob,
+  enqueueWeeklyReportBatch,
+};

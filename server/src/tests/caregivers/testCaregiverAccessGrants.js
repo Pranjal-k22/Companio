@@ -85,3 +85,4 @@ export async function runCaregiverAccessGrantsTests() {
   assert.strictEqual(reportCheck.authorized, false, 'Ungranted report scope must be denied');
   console.log('  ✔ [PASS] Ungranted clinical report scope (REPORT_SUMMARY_READ) strictly denied');
 }
+

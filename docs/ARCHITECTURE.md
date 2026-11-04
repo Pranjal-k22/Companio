@@ -367,4 +367,33 @@ Prior to starting a speech session on `/voice`:
 - Every caregiver interaction is recorded in an immutable, append-only ledger (`CaregiverAccessEvent`) with IP address, user agent, request correlation ID, and evaluated scope.
 - Patients have complete visibility into their access history through the Patient Permission Center.
 
+---
+
+## 15. Distributed Background Jobs via Redis & BullMQ (Phase 9)
+
+### 15.1 Dedicated Background Queue Topology
+- Decouples background processing from the Node.js event loop into 7 specialized queues:
+  1. `clinical-escalation`: Highest priority queue for clinician SMS/Email alerts during RED flags.
+  2. `sms-notification`: Twilio SMS alerts and verification tokens.
+  3. `email-notification`: Transactional Resend digests and notices.
+  4. `caregiver-notification`: Scoped caregiver alerts with verified PHI minimization.
+  5. `checkin-reminder`: Scheduled senior morning/afternoon wellness check-in prompts.
+  6. `report-generation`: 7-day retrospective analytics and narration synthesis (concurrency throttled to 2).
+  7. `maintenance`: System housekeeping sweeps (token expiration, stale report archiving).
+
+### 15.2 Resilient In-Memory Fallback Subsystem
+- In production, connects to `REDIS_URL` using `ioredis` with `maxRetriesPerRequest: null`, exponential reconnect, and connection pooling.
+- When Redis is absent or `REDIS_FALLBACK=true`, automatically activates `InMemoryQueue` and `InMemoryWorker`, providing identical BullMQ interfaces, concurrency limiting, retries, and dead-letter handling without crashing.
+
+### 15.3 Critical Clinical Safety & Privacy Invariants
+- **Clinical Flag Immutability**: Notification delivery failures or exhausted retries NEVER delete, downgrade, or resolve a clinical `Flag`. Flags strictly remain in `escalated` status in MongoDB.
+- **Durable Outbox Pattern**: Delivery state is permanently tracked in MongoDB `EscalationEvent` documents (`QUEUED`, `PROCESSING`, `SENT`, `RETRY_PENDING`, `FAILED`).
+- **Zero PHI in Payloads**: Redis payloads contain only non-sensitive IDs and correlation tokens. Plaintext names, transcripts, or clinical details are never persisted in Redis.
+- **Idempotency & Deduplication**: Deterministic `jobId` hashing prevents redundant job processing across horizontally scaled server replicas.
+- **Attestation Gate**: Reports generated in the background are strictly in `PENDING_REVIEW` status and require formal clinician review and attestation before publication.
+
+### 15.4 Queue Observability & Administration
+- Administrative endpoints (`/api/v1/admin/queues`) allow authorized clinicians and admins to inspect queue health, monitor worker counts, triage failed dead-letter jobs, retry failed jobs, and trigger on-demand maintenance passes.
+
+
 

@@ -2,12 +2,14 @@ import mongoose from 'mongoose';
 
 export const ESCALATION_STATUSES = [
   'QUEUED',
+  'PROCESSING',
   'ACCEPTED',
   'SENT',
   'DELIVERED',
   'FAILED',
   'RETRY_PENDING',
   'ACKNOWLEDGED',
+  'RESOLVED',
   'PENDING', // Legacy support
 ];
 

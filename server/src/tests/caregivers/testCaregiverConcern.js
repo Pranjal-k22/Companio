@@ -79,3 +79,4 @@ export async function runCaregiverConcernTests() {
   assert.strictEqual(flag.category, 'chest_pain', 'Flag category must be chest_pain');
   console.log('  ✔ [PASS] Acute symptom concern automatically triggered Phase 5 clinical safety net (RED flag raised)');
 }
+

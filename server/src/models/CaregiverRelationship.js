@@ -154,3 +154,4 @@ caregiverRelationshipSchema.index({ invitationEmail: 1, organizationId: 1, statu
 
 export const CaregiverRelationship = mongoose.model('CaregiverRelationship', caregiverRelationshipSchema);
 export default CaregiverRelationship;
+

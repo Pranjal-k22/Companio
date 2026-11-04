@@ -115,3 +115,4 @@ export async function runCaregiverVoiceTests() {
   );
   console.log('  ✔ [PASS] Clinical Invariant: Caregiver assent alone is NEVER treated as patient confirmation');
 }
+

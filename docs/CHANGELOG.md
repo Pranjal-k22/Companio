@@ -5,6 +5,38 @@ All notable changes to the Companio healthcare platform will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-11-04
+
+### Added
+- **Distributed Background Job Infrastructure**: Introduced BullMQ and Redis queue architecture (`redisConnection.js`, `queueConfig.js`, `queueManager.js`, `workerBootstrap.js`).
+- **Resilient In-Memory Fallback Adapter**: `InMemoryQueue` and `InMemoryWorker` conforming to BullMQ's API, enabling local development and automated CI testing without external Redis server dependencies (`inMemoryQueue.js`).
+- **7 Dedicated Background Queues**:
+  - `clinical-escalation`: Highest priority queue for clinician SMS/email emergency alerts.
+  - `sms-notification`: Twilio SMS alerts and reminders.
+  - `email-notification`: Resend transactional emails and digests.
+  - `caregiver-notification`: Scoped caregiver alerts with verified PHI minimization.
+  - `checkin-reminder`: Daily wellness check-in prompts.
+  - `report-generation`: 7-day retrospective clinical analytics and narration synthesis (concurrency throttled to 2).
+  - `maintenance`: System housekeeping sweeps (token expiration, stale report archiving).
+- **Critical Clinical Invariants**:
+  - Notification delivery failures or exhausted retries NEVER delete or downgrade clinical flags; flags remain preserved in `escalated` status.
+  - Zero PHI in Redis payloads (only non-sensitive ObjectIds and correlation tokens).
+  - Background worker reports are created strictly in `PENDING_REVIEW` status and require clinician attestation before publication.
+- **Queue Administration & Observability REST APIs**:
+  - `GET /api/v1/admin/queues/health`: Real-time queue depths and Redis connectivity status.
+  - `GET /api/v1/admin/queues/:name/failed`: Failed jobs and stack trace inspection.
+  - `POST /api/v1/admin/queues/:name/retry`: Retry dead-letter jobs.
+  - `POST /api/v1/admin/queues/:name/clean`: Purge old completed/failed jobs.
+  - `POST /api/v1/admin/queues/maintenance/trigger`: On-demand maintenance sweep.
+- **Phase 9 Master Test Suite**: 10 unit and integration test suites covering job processing, deduplication, exponential backoff, dead-letter state, Redis resilience, report queues, caregiver permissions, tenant isolation, and 6 admin REST APIs (`testBackgroundJobsMaster.js`).
+
+### Changed
+- Upgraded `server.js` to automatically bootstrap background workers on startup.
+- Upgraded `EscalationEvent.js` schema with `PROCESSING` and `RESOLVED` statuses.
+- Upgraded `weeklyReportWorker.js` with `enqueueReportGenerationJob` and `enqueueWeeklyReportBatch`.
+- Upgraded `escalationDispatcher.js` with `queueEscalation`.
+- Upgraded `caregiverNotificationService.js` with `queueCaregiverNotification`.
+
 ## [1.8.0] - 2026-11-04
 
 ### Added

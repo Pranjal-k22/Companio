@@ -164,3 +164,4 @@ export async function runCaregiverRevocationTests() {
   assert(consentOverrideCheck.reason.includes('withdrawn'), 'Reason must state underlying consent withdrawn');
   console.log('  ✔ [PASS] Clinical Invariant: Caregiver grant never overrides withdrawn patient consent');
 }
+

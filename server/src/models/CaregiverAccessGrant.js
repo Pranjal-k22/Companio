@@ -131,3 +131,4 @@ caregiverAccessGrantSchema.methods.hasScope = function (scope) {
 
 export const CaregiverAccessGrant = mongoose.model('CaregiverAccessGrant', caregiverAccessGrantSchema);
 export default CaregiverAccessGrant;
+

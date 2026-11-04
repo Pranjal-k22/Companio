@@ -121,7 +121,45 @@ export async function sendCaregiverNotification({
   };
 }
 
+export const dispatchCaregiverNotification = sendCaregiverNotification;
+
+/**
+ * Enqueues a caregiver notification to the background queue.
+ */
+export async function queueCaregiverNotification({
+  organizationId,
+  patientId,
+  caregiverUserId,
+  relationshipId,
+  type,
+  payload = {},
+  correlationId,
+}) {
+  const { addJob } = await import('../../jobs/queueManager.js');
+  const { QUEUE_NAMES } = await import('../../jobs/queueConfig.js');
+
+  return await addJob(
+    QUEUE_NAMES.CAREGIVER_NOTIFICATION,
+    'dispatch-caregiver-notification',
+    {
+      organizationId,
+      patientId,
+      caregiverUserId,
+      relationshipId,
+      eventType: type,
+      payload,
+      correlationId,
+    },
+    {
+      jobId: `caregiver-notify-${caregiverUserId}-${type}-${Date.now()}`,
+    }
+  );
+}
+
 export default {
   NOTIFICATION_TYPES,
   sendCaregiverNotification,
+  dispatchCaregiverNotification,
+  queueCaregiverNotification,
 };
+

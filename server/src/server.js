@@ -13,6 +13,7 @@ import { requireRole } from './middleware/roles.js';
 import { socketAuthMiddleware } from './sockets/socketAuth.js';
 import { initVoiceSocket } from './sockets/voiceSession.js';
 import { initWeeklyReportCron } from './jobs/weeklyReportWorker.js';
+import { initBackgroundWorkers } from './jobs/workerBootstrap.js';
 
 // Load environment variables
 dotenv.config();
@@ -96,6 +97,9 @@ initVoiceSocket(io);
 
 // Initialize Automated Weekly Report Cron Worker (Mondays 2:00 AM)
 initWeeklyReportCron();
+
+// Initialize Distributed Background Workers (BullMQ / Redis)
+initBackgroundWorkers().catch((err) => console.warn('[BackgroundWorkers] Startup warning:', err?.message));
 
 // Start Server
 if (process.env.NODE_ENV !== 'test') {

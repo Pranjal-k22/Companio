@@ -286,8 +286,106 @@ export async function dispatchEscalation(flagDoc, options = {}) {
   };
 }
 
+/**
+ * Enqueues an escalation event to the distributed background queue.
+ * Implements the Durable Outbox pattern: records QUEUED events in MongoDB,
+ * then dispatches them to BullMQ / Redis for asynchronous processing.
+ */
+export async function queueEscalation(flagDoc, options = {}) {
+  if (!flagDoc) {
+    return { success: false, reason: 'Flag document missing' };
+  }
+
+  const { addJob } = await import('../../jobs/queueManager.js');
+  const { QUEUE_NAMES } = await import('../../jobs/queueConfig.js');
+
+  const tier = options.tier || flagDoc.escalationTier || 1;
+  let patient = options.patient;
+  if (!patient && flagDoc.patientId) {
+    try {
+      patient = await Patient.findById(flagDoc.patientId).lean();
+    } catch {
+      patient = null;
+    }
+  }
+
+  const targets = await resolveEscalationRecipients(flagDoc, {
+    patient,
+    tier,
+    organization: options.organization || flagDoc.organizationId,
+  });
+
+  const queuedEvents = [];
+
+  for (const target of targets) {
+    let eventRecord = null;
+    try {
+      eventRecord = await EscalationEvent.create({
+        flagId: flagDoc._id,
+        patientId: flagDoc.patientId,
+        organizationId: flagDoc.organizationId || patient?.organizationId,
+        clinicianId: target.clinicianId,
+        channel: target.channel,
+        recipient: target.recipient,
+        tier: target.tier || tier,
+        status: 'QUEUED',
+        attempts: 0,
+        maxAttempts: 5,
+        metadata: {
+          flagCategory: flagDoc.category,
+          flagSeverity: flagDoc.severity,
+          mock: target.mock || false,
+        },
+      });
+    } catch (err) {
+      console.warn('[EscalationDispatcher] Error persisting outbox event:', err.message);
+      eventRecord = {
+        _id: new (await import('mongoose')).default.Types.ObjectId(),
+        flagId: flagDoc._id,
+        channel: target.channel,
+        recipient: target.recipient,
+        tier: target.tier || tier,
+        attempts: 0,
+        mock: target.mock,
+      };
+    }
+
+    const job = await addJob(
+      QUEUE_NAMES.CLINICAL_ESCALATION,
+      'clinical-escalation-job',
+      {
+        eventId: eventRecord._id,
+        flagId: flagDoc._id,
+        patientId: flagDoc.patientId,
+        organizationId: flagDoc.organizationId || patient?.organizationId,
+        tier: target.tier || tier,
+        channel: target.channel,
+        correlationId: options.correlationId,
+      },
+      {
+        jobId: `escalation-${eventRecord._id}-1`,
+        priority: 1,
+      }
+    );
+
+    queuedEvents.push({
+      eventId: eventRecord._id,
+      jobId: job.id,
+      channel: target.channel,
+    });
+  }
+
+  return {
+    success: true,
+    flagId: flagDoc._id,
+    tier,
+    queuedEvents,
+  };
+}
+
 export default {
   dispatchEscalation,
   dispatchSingleEvent,
+  queueEscalation,
   getCategoryLabel,
 };

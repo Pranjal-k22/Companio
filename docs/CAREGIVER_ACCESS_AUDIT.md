@@ -73,3 +73,4 @@ Patients inspect who accessed their data through their dedicated interface:
 - **Endpoint**: `GET /api/v1/patients/:id/caregiver-access-events`
 - **UI View**: In `PatientCaregiverAccess.jsx`, the "Access History & Audit Trail" card lists every access timestamp, caregiver name, resource viewed, and device type.
 - **Exporting Disclosures**: Caregiver access records are automatically included in the patient's HIPAA/GDPR DSAR export bundle (`GET /api/v1/patients/:id/export`).
+

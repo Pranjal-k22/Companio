@@ -43,3 +43,4 @@ If any check fails, the notification is silently suppressed and logged to intern
 - **In-App Notification Feed**: Stored in `CaregiverNotification` collection, viewable in real-time at `/caregiver/notifications`.
 - **SMS / Twilio**: Sent using verified alphanumeric IDs; body strictly adheres to the 160-character HIPAA-safe template.
 - **Email / Resend**: Branded transactional notification with zero PHI in subject line or header. Links require authenticated portal login.
+

@@ -308,3 +308,4 @@ export default {
   acceptCaregiverInvitation,
   revokeCaregiverRelationship,
 };
+

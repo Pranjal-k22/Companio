@@ -75,3 +75,4 @@ export async function runCaregiverAuditTests() {
     console.log('  ✔ [PASS] Immutability guard enforced: CaregiverAccessEvent updates strictly prohibited');
   }
 }
+

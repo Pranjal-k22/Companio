@@ -84,3 +84,4 @@ export async function runCaregiverAuthorizationTests() {
   assert(PROHIBITED_CAREGIVER_ACTIONS.includes('flags:resolve'), 'Caregivers prohibited from resolving clinical flags');
   console.log('  ✔ [PASS] Negative permission boundaries strictly enforced (no prescriptions, attestation, or flag resolution)');
 }
+

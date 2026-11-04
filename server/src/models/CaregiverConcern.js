@@ -106,3 +106,4 @@ caregiverConcernSchema.index({ caregiverUserId: 1, submittedAt: -1 });
 
 export const CaregiverConcern = mongoose.model('CaregiverConcern', caregiverConcernSchema);
 export default CaregiverConcern;
+

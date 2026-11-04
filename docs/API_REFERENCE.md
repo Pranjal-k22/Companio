@@ -481,4 +481,35 @@ All endpoints require authentication and are scoped to the active organization t
 - **Access**: Caregiver
 - **Description**: Returns audit log of data accesses performed by the calling caregiver.
 
+---
+
+## 11. Queue Administration & Observability Endpoints (Phase 9)
+
+### 11.1 `GET /api/v1/admin/queues/health`
+- **Access**: Clinician / Admin
+- **Description**: Returns overall Redis connectivity status, roundtrip latency, and real-time job counts (`waiting`, `active`, `completed`, `failed`, `delayed`) across all 7 background queues.
+
+### 11.2 `GET /api/v1/admin/queues/:name/failed`
+- **Access**: Clinician / Admin
+- **Parameters**: `name` (Queue Name), `start` (offset, default: 0), `end` (limit, default: 50)
+- **Description**: Retrieves failed and dead-letter jobs with failure reasons, error stack traces, and attempt counts for clinical auditing and triage.
+
+### 11.3 `POST /api/v1/admin/queues/:name/retry`
+- **Access**: Clinician / Admin
+- **Parameters**: `name` (Queue Name)
+- **Body**: `{ count?: number }`
+- **Description**: Moves failed jobs back to the `waiting` state for re-execution.
+
+### 11.4 `POST /api/v1/admin/queues/:name/clean`
+- **Access**: Clinician / Admin
+- **Parameters**: `name` (Queue Name)
+- **Body**: `{ graceMs?: number, type?: "completed" | "failed" }`
+- **Description**: Purges old completed or failed jobs exceeding the specified grace retention window.
+
+### 11.5 `POST /api/v1/admin/queues/maintenance/trigger`
+- **Access**: Clinician / Admin
+- **Body**: `{ taskType?: "ALL" | "EXPIRE_INVITATIONS" | "STALE_REPORTS" }`
+- **Description**: Manually enqueues an on-demand system maintenance sweep onto the maintenance queue.
+
+
 

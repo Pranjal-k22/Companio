@@ -13,13 +13,26 @@
     "test:dialogue": "node server/src/testClinicalDialogue.js",
     "test:reporting": "node server/src/testReportingMaster.js",
     "test:caregivers": "node server/src/testCaregiverMaster.js",
+    "test:jobs": "node server/src/testBackgroundJobsMaster.js",
     "install:all": "npm install && npm install --prefix server && npm install --prefix client",
     "build:client": "npm run build --prefix client"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
   },
-  "keywords": ["ai", "healthcare", "voice-agent", "mern", "deepgram", "elevenlabs"],
+  "keywords": [
+    "ai",
+    "healthcare",
+    "voice-agent",
+    "mern",
+    "deepgram",
+    "elevenlabs"
+  ],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "bullmq": "^6.6.0",
+    "ioredis": "^5.11.1",
+    "ioredis-mock": "^8.13.1"
+  }
 }

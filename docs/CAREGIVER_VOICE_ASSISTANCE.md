@@ -75,3 +75,4 @@ During the check-in, utterances processed by STT and the Dialogue Manager are cl
 ```
 
 If the patient declines or disagrees, the observation amendment workflow (`POST /api/v1/observations/:id/amend`) is triggered, superseding the incorrect observation with provenance tracking.
+

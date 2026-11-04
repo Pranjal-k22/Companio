@@ -99,3 +99,4 @@ export async function runCaregiverNotificationsTests() {
   assert.strictEqual(postRevokeResult.sent, false, 'Notification must not be sent after revocation');
   console.log('  ✔ [PASS] Notification immediately suppressed post-revocation');
 }
+

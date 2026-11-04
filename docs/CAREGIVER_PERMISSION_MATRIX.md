@@ -95,3 +95,4 @@ The entire scope matrix and negative boundary enforcement are verified by automa
 - `server/src/tests/caregivers/testCaregiverAccessGrants.js` (Positive & negative scope evaluation)
 - `server/src/tests/caregivers/testCaregiverRevocation.js` (Instant revocation & consent withdrawal)
 - `server/src/tests/caregivers/testCaregiverMultiTenancy.js` (Cross-tenant & cross-caregiver isolation)
+

@@ -142,3 +142,4 @@ export async function runCaregiverInvitationTests() {
   assert.strictEqual(revoked.invitationTokenHash, null, 'Revoked relationship token must be cleared');
   console.log('  ✔ [PASS] Patient successfully revoked caregiver invitation');
 }
+
