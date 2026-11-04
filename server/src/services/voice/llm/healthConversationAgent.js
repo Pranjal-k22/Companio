@@ -214,21 +214,35 @@ export async function executeToolCall(toolName, args, sessionContext) {
     }
 
     if (toolName === 'logCheckin') {
-      const checkin = await Checkin.create({
+      // Check if Checkin already exists for this conversation (prevent duplicate Checkin documents)
+      const existingCheckin = await Checkin.findOne({ conversationId });
+
+      const updateData = {
         patientId,
         conversationId,
         type: sessionContext.type || 'daily',
-        adherence: args.adherence || { taken: true, missedDoses: 0 },
-        symptoms: args.symptoms || [],
-        sleep: args.sleep || { hours: 7.5, quality: 'good' },
-        hydration: args.hydration || { estimatedMl: 2000, glasses: 8 },
-        activity: args.activity || { minutesActive: 30, type: 'Walk' },
-        wellbeingScore: args.wellbeingScore || 8,
-        patientConcerns: args.patientConcerns || [],
+        organizationId: sessionContext.organizationId || null,
         timestamp: new Date(),
-      });
+      };
 
-      console.log(`[MongoDB Checkin Created] Checkin ID (${checkin._id})`);
+      // Only persist values explicitly provided in args (never fabricate defaults)
+      if (args.adherence !== undefined) updateData.adherence = args.adherence;
+      if (args.symptoms !== undefined) updateData.symptoms = args.symptoms;
+      if (args.sleep !== undefined) updateData.sleep = args.sleep;
+      if (args.hydration !== undefined) updateData.hydration = args.hydration;
+      if (args.activity !== undefined) updateData.activity = args.activity;
+      if (args.wellbeingScore !== undefined) updateData.wellbeingScore = args.wellbeingScore;
+      if (args.patientConcerns !== undefined) updateData.patientConcerns = args.patientConcerns;
+
+      let checkin;
+      if (existingCheckin) {
+        checkin = await Checkin.findByIdAndUpdate(existingCheckin._id, { $set: updateData }, { new: true });
+        console.log(`[MongoDB Checkin Updated] Checkin ID (${checkin._id})`);
+      } else {
+        checkin = await Checkin.create(updateData);
+        console.log(`[MongoDB Checkin Created] Checkin ID (${checkin._id})`);
+      }
+
       return { success: true, checkinId: checkin._id };
     }
 
@@ -353,13 +367,21 @@ export async function processConversationTurn(userTranscript, sessionContext, op
 
 /**
  * Deterministic Clinical NLP Fallback Engine
- * Parses text for clinical taxonomy keywords, executes tool calls directly, and returns warm responses.
+ * Parses text for clinical taxonomy keywords, executes safety flag tool calls directly,
+ * and returns warm, supportive conversational responses without inventing patient observations.
  */
-export async function processClinicalFallbackTurn(userTranscript, sessionContext) {
-  const text = userTranscript.toLowerCase();
+export async function processClinicalFallbackTurn(userTranscript, sessionContext = {}) {
+  const text = (userTranscript || '').toLowerCase().trim();
 
   // 1. Detect RED Flags (e.g. chest pain, severe breathlessness)
-  if (text.includes('chest pain') || text.includes('chest tightness') || text.includes('trouble breathing') || text.includes('fainted')) {
+  if (
+    text.includes('chest pain') ||
+    text.includes('chest tightness') ||
+    text.includes('trouble breathing') ||
+    text.includes('fainted') ||
+    text.includes('fainting') ||
+    text.includes('passed out')
+  ) {
     await executeToolCall(
       'flagConcern',
       {
@@ -371,52 +393,81 @@ export async function processClinicalFallbackTurn(userTranscript, sessionContext
       sessionContext
     );
 
-    await executeToolCall('logCheckin', {
-      adherence: { taken: true, missedDoses: 0 },
-      symptoms: [{ name: 'Chest tightness', severity: 'severe', notes: userTranscript }],
-      sleep: { hours: 5, quality: 'poor' },
-      wellbeingScore: 3,
-    }, sessionContext);
-
-    return "I want to make sure your care team knows about this chest tightness right away so they can support you. Please rest comfortably while I notify Dr. Jenkins.";
+    // Never fabricate observations or checkin documents
+    return "I want to make sure your care team knows about this right away so they can support you. Please rest comfortably while I notify your care team.";
   }
 
   // 2. Detect YELLOW Flags (e.g. mild knee stiffness, missed dose, sleep issues)
-  if (text.includes('knee stiffness') || text.includes('joint pain') || text.includes('missed my pill') || text.includes('poor sleep')) {
-    const isMedLapse = text.includes('missed my pill');
+  if (
+    text.includes('knee stiffness') ||
+    text.includes('joint pain') ||
+    text.includes('missed my pill') ||
+    text.includes('missed my dose') ||
+    text.includes('poor sleep')
+  ) {
+    const isMedLapse = text.includes('missed my pill') || text.includes('missed my dose');
 
     await executeToolCall(
       'flagConcern',
       {
         severity: 'yellow',
         category: isMedLapse ? 'missed_dose_or_mild_side_effect' : 'mild_new_symptom',
-        description: isMedLapse ? 'Patient missed medication dose.' : 'Patient reported mild knee joint stiffness.',
+        description: isMedLapse ? 'Patient missed medication dose.' : 'Patient reported mild joint discomfort.',
         sourceText: userTranscript,
       },
       sessionContext
     );
 
-    await executeToolCall('logCheckin', {
-      adherence: { taken: !isMedLapse, missedDoses: isMedLapse ? 1 : 0 },
-      symptoms: isMedLapse ? [] : [{ name: 'Knee joint stiffness', severity: 'mild', notes: userTranscript }],
-      sleep: { hours: 6.5, quality: 'fair' },
-      wellbeingScore: 6,
-    }, sessionContext);
-
-    return "Thank you for letting me know. I've noted down your knee stiffness for your care team. Are you having any other symptoms today?";
+    // Never fabricate observations or checkin documents
+    return "Thank you for letting me know. I've noted down your concern for your care team. Are you experiencing any other symptoms today?";
   }
 
-  // 3. Normal Daily Check-in (No Flags)
-  await executeToolCall('logCheckin', {
-    adherence: { taken: true, missedDoses: 0 },
-    symptoms: [],
-    sleep: { hours: 8, quality: 'good' },
-    hydration: { estimatedMl: 2100, glasses: 8 },
-    activity: { minutesActive: 30, type: 'Morning walk' },
-    wellbeingScore: 9,
-  }, sessionContext);
+  // 3. Normal Conversational Progression (Zero Fabricated Observations or Checkins)
+  // Greetings
+  if (
+    text.includes('hello') ||
+    text.includes('hi') ||
+    text.includes('hey') ||
+    text.includes('good morning') ||
+    text.includes('good afternoon')
+  ) {
+    return "Hello! I'm here to help with your daily health check-in. How are you feeling today?";
+  }
 
-  return "That is wonderful to hear! I've logged your daily Lisinopril medication and 30-minute morning walk. Is there anything else you'd like to update your care team on?";
+  // Positive or general feeling
+  if (
+    text.includes('good') ||
+    text.includes('fine') ||
+    text.includes('great') ||
+    text.includes('doing well') ||
+    text.includes('not bad') ||
+    text.includes('okay') ||
+    text.includes('pretty good')
+  ) {
+    return "I'm glad to hear that! Have you been able to take your scheduled medications today?";
+  }
+
+  // Medication affirmation
+  if (
+    text.includes('took my pill') ||
+    text.includes('took my medication') ||
+    text.includes('taken') ||
+    text.includes('took them')
+  ) {
+    return "That's wonderful to hear. How did you sleep last night?";
+  }
+
+  // Sleep report
+  if (
+    text.includes('slept') ||
+    text.includes('sleep') ||
+    text.includes('hours')
+  ) {
+    return "Thank you for letting me know. Have you been able to drink plenty of fluids and stay hydrated today?";
+  }
+
+  // Default warm check-in question
+  return "Thank you for sharing that with me. Is there anything else you'd like to share about how you're feeling today?";
 }
 
 export default processConversationTurn;

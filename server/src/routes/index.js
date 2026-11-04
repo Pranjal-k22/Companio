@@ -9,6 +9,8 @@ import appointmentsRouter from './appointments.js';
 import labResultsRouter from './labResults.js';
 import conversationsRouter from './conversations.js';
 import organizationRouter from './organizationRoutes.js';
+import dialogueSessionsRouter from './dialogueSessions.js';
+import observationsRouter from './observations.js';
 
 const apiRouter = express.Router();
 
@@ -27,6 +29,8 @@ apiRouter.use('/reports', reportsRouter);
 apiRouter.use('/appointments', appointmentsRouter);
 apiRouter.use('/lab-results', labResultsRouter);
 apiRouter.use('/conversations', conversationsRouter);
+apiRouter.use('/dialogue-sessions', dialogueSessionsRouter);
+apiRouter.use('/observations', observationsRouter);
 
 export default apiRouter;
 

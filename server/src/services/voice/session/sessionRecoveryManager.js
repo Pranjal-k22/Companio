@@ -55,6 +55,7 @@ class SessionRecoveryManager {
       record.history = sessionData.history;
       record.startedAt = sessionData.startedAt;
       record.lastAckSeq = sessionData.lastAckSeq || sessionData.lastAckSequence || 0;
+      record.agendaState = sessionData.agendaState || null;
     }
     return rawToken;
   }

@@ -3,12 +3,14 @@ import { verifyToken } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roles.js';
 import { tenantContext } from '../middleware/tenantContext.js';
 import { requireCareTeamOrSelf, requirePermission } from '../middleware/tenantAuthorization.js';
-import { Patient, Checkin, Flag } from '../models/index.js';
+import { Patient, Checkin, Flag, DialogueSession, Observation, Conversation } from '../models/index.js';
 import { sendSuccess } from '../utils/response.js';
 import { NotFoundError } from '../errors/AppError.js';
 import { validateRequest } from '../middleware/validate.js';
 import { objectIdSchema } from '../validators/common.schemas.js';
 import { patientCreateSchema } from '../validators/patient.schemas.js';
+import { createDialogueSessionSchema, observationQuerySchema } from '../validators/index.js';
+import { ClinicalDialogueManager } from '../services/dialogue/clinicalDialogueManager.js';
 import { PERMISSIONS } from '../constants/permissions.js';
 import {
   getPatientConsents,
@@ -243,6 +245,113 @@ router.post(
   }),
   requireCareTeamOrSelf('patientId'),
   anonymizePatientHandler
+);
+
+/**
+ * @route   POST /api/v1/patients/:patientId/dialogue-sessions
+ * @desc    Initialize a dialogue session for a patient
+ * @access  Private (Care-team or self)
+ */
+router.post(
+  '/:patientId/dialogue-sessions',
+  verifyToken,
+  tenantContext,
+  validateRequest({ params: patientParamSchema, body: createDialogueSessionSchema }),
+  requireCareTeamOrSelf('patientId'),
+  async (req, res, next) => {
+    try {
+      const { patientId } = req.params;
+      const { templateId = 'DAILY_WELLNESS_CHECKIN', conversationId } = req.body;
+      const orgId = req.tenant.organizationObjectId;
+
+      const patient = await Patient.findOne({ _id: patientId, organizationId: orgId });
+      if (!patient) {
+        throw new NotFoundError(`Patient not found in this organization.`);
+      }
+
+      let convId = conversationId;
+      if (!convId) {
+        const conv = await Conversation.create({
+          patientId,
+          organizationId: orgId,
+          type: templateId === 'WEEKLY_HEALTH_REVIEW' ? 'weekly' : 'daily',
+          status: 'active',
+          startedAt: new Date(),
+        });
+        convId = conv._id.toString();
+      }
+
+      const { session, agenda } = await ClinicalDialogueManager.getOrCreateSession({
+        patientId,
+        conversationId: convId,
+        organizationId: orgId,
+        templateId,
+      });
+
+      return sendSuccess(
+        res,
+        {
+          session,
+          agenda: agenda.serialize(),
+        },
+        { statusCode: 201 }
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @route   GET /api/v1/patients/:patientId/observations
+ * @desc    Get paginated clinical observations for a patient
+ * @access  Private (Care-team or self)
+ */
+router.get(
+  '/:patientId/observations',
+  verifyToken,
+  tenantContext,
+  validateRequest({ params: patientParamSchema, query: observationQuerySchema }),
+  requireCareTeamOrSelf('patientId'),
+  async (req, res, next) => {
+    try {
+      const { patientId } = req.params;
+      const { category, code, confirmationStatus, limit = 50, page = 1 } = req.query;
+
+      const query = {
+        patientId,
+        organizationId: req.tenant.organizationObjectId,
+      };
+
+      if (category) query.observationCategory = category;
+      if (code) query.observationCode = code;
+      if (confirmationStatus) query.confirmationStatus = confirmationStatus;
+
+      const parsedLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+      const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+      const skip = (parsedPage - 1) * parsedLimit;
+
+      const [observations, total] = await Promise.all([
+        Observation.find(query)
+          .sort({ effectiveDateTime: -1 })
+          .skip(skip)
+          .limit(parsedLimit)
+          .lean(),
+        Observation.countDocuments(query),
+      ]);
+
+      return sendSuccess(res, observations, {
+        pagination: {
+          page: parsedPage,
+          limit: parsedLimit,
+          total,
+          totalPages: Math.ceil(total / parsedLimit) || 1,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 );
 
 export default router;

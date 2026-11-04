@@ -1,0 +1,142 @@
+/**
+ * Weekly Comprehensive Health Review Workflow Specification
+ * Target duration: 5-7 minutes. Comprehensive geriatric surveillance.
+ */
+
+export const WEEKLY_CHECKIN_SECTIONS = [
+  {
+    id: 'GREETING',
+    title: 'Weekly Check-in Greeting',
+    observationCode: null,
+    defaultQuestion: "Hello! It's time for our weekly health review. How has your past week been overall?",
+    isClinicalObservation: false,
+    optional: false,
+  },
+  {
+    id: 'OVERALL_HEALTH_CHANGES',
+    title: 'Health & Energy Changes',
+    observationCode: null,
+    defaultQuestion: "Looking back at the past seven days, have you felt any major changes in your energy or general health?",
+    isClinicalObservation: false,
+    optional: true,
+  },
+  {
+    id: 'MEDICATION_ADHERENCE_TRENDS',
+    title: 'Medication Adherence Trends',
+    observationCode: 'MED_ADHERENCE',
+    loincCode: '59556-1',
+    defaultQuestion: "How went your medications this week? Did you miss any doses or have any trouble keeping up with them?",
+    isClinicalObservation: true,
+    optional: true,
+  },
+  {
+    id: 'RECURRING_SYMPTOMS',
+    title: 'Recurring Symptoms or Pain',
+    observationCode: 'PAIN_SEVERITY',
+    loincCode: '72514-3',
+    defaultQuestion: "Have you had any persistent symptoms this week, like joint stiffness, swelling, or dizziness?",
+    isClinicalObservation: true,
+    optional: true,
+  },
+  {
+    id: 'FALLS_AND_NEAR_FALLS',
+    title: 'Fall Risk & Balance Surveillance',
+    observationCode: 'FALL_INCIDENT',
+    loincCode: '87625-0',
+    defaultQuestion: "Over the past week, did you have any slips, stumbles, loss of balance, or near-falls at home?",
+    followUpQuestions: {
+      fallReported: "Were you able to get up safely, and did you sustain any cuts, bruises, or pain?",
+    },
+    isClinicalObservation: true,
+    optional: true,
+  },
+  {
+    id: 'MOBILITY_ASSISTIVE_DEVICES',
+    title: 'Mobility & Assistive Devices',
+    observationCode: 'MOBILITY_STATUS',
+    loincCode: '89383-4',
+    defaultQuestion: "How steady have you felt walking around, and have you been using a cane, walker, or handrails?",
+    isClinicalObservation: true,
+    optional: true,
+  },
+  {
+    id: 'SLEEP_PATTERNS',
+    title: 'Weekly Sleep Patterns',
+    observationCode: 'SLEEP_DURATION',
+    loincCode: '93832-4',
+    defaultQuestion: "On average this past week, about how many hours a night have you been getting, and have you been waking up frequently?",
+    isClinicalObservation: true,
+    optional: true,
+  },
+  {
+    id: 'HYDRATION_NUTRITION',
+    title: 'Weekly Hydration & Appetite',
+    observationCode: 'FLUID_INTAKE',
+    loincCode: '9052-2',
+    defaultQuestion: "Have you been able to maintain your normal appetite and drink plenty of fluids every day?",
+    isClinicalObservation: true,
+    optional: true,
+  },
+  {
+    id: 'ACTIVITY_CHANGES',
+    title: 'Activity & Mobility Changes',
+    observationCode: 'PHYSICAL_ACTIVITY',
+    loincCode: '89555-7',
+    defaultQuestion: "Have you been able to get outside or do any of your favorite activities or light exercises this week?",
+    isClinicalObservation: true,
+    optional: true,
+  },
+  {
+    id: 'MOOD_AND_LONELINESS',
+    title: 'Mood & Social Connection',
+    observationCode: 'SOCIAL_ISOLATION',
+    loincCode: '93033-9',
+    defaultQuestion: "How has your mood been this week? Have you had good chances to chat with friends, family, or neighbors, or have you felt a bit lonely?",
+    isClinicalObservation: true,
+    optional: true,
+  },
+  {
+    id: 'WEIGHT_CHANGES',
+    title: 'Weight & Fluid Retention Tracking',
+    observationCode: 'BODY_WEIGHT',
+    loincCode: '29463-7',
+    defaultQuestion: "Have you checked your weight recently on a scale, or noticed any puffiness in your ankles or feet?",
+    isClinicalObservation: true,
+    optional: true,
+  },
+  {
+    id: 'MEDICATION_REFILLS',
+    title: 'Medication Refill & Supply Logistics',
+    observationCode: 'MED_REFILL',
+    loincCode: '67711-2',
+    defaultQuestion: "Are any of your prescription medications running low, or do you need help getting a refill this coming week?",
+    isClinicalObservation: true,
+    optional: true,
+  },
+  {
+    id: 'PATIENT_QUESTIONS_GOALS',
+    title: 'Upcoming Visits & Goals',
+    observationCode: null,
+    defaultQuestion: "Do you have any upcoming doctor appointments or specific questions you'd like us to prepare for your care team?",
+    isClinicalObservation: false,
+    optional: true,
+  },
+  {
+    id: 'READBACK_CONFIRMATION',
+    title: 'Patient Read-Back Verification',
+    observationCode: null,
+    defaultQuestion: "Thank you for reviewing all of that with me. Let me summarize what I have recorded for your care team...",
+    isClinicalObservation: false,
+    optional: false,
+  },
+];
+
+export const WEEKLY_WORKFLOW = {
+  templateId: 'WEEKLY_HEALTH_REVIEW',
+  templateVersion: '1.0.0',
+  title: 'Weekly Comprehensive Health Review',
+  targetMinutes: 6,
+  sections: WEEKLY_CHECKIN_SECTIONS,
+};
+
+export default WEEKLY_WORKFLOW;

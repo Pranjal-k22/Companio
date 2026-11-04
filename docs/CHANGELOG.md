@@ -5,6 +5,28 @@ All notable changes to the Companio healthcare platform will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-11-04
+
+### Added
+- **Clinical Dialogue Manager**: Server-authoritative conversational state machine (`clinicalDialogueManager.js`, `dialogueAgenda.js`) governing check-in trajectory.
+- **Strict One-Question Policy**: `questionPlanner.js` enforcing single questions to minimize cognitive load for older adults (55+).
+- **Daily & Weekly Workflows**: Distinct specifications for rapid daily check-in (`dailyCheckinWorkflow.js`, 2-3 min) and comprehensive weekly geriatric surveillance (`weeklyCheckinWorkflow.js`, falls, mobility aids, isolation, refills).
+- **Dialogue Session Model**: Created `DialogueSession.js` tracking section progression, skipped sections, pending clarifications, and idempotent finalization.
+- **Clinical Observation Model & LOINC Mapping**: Created `Observation.js` with verified LOINC mappings (e.g. `59556-1` for adherence, `93832-4` for sleep, `87625-0` for falls) and typed value structures.
+- **Observation Validation & Bounds Engine**: `observationValidator.js` enforcing physiological bounds and explicit missing-value semantics (`NOT_ASKED`, `DECLINED`, `UNKNOWN`); never converts missing data to zero.
+- **Contradiction Detection & Non-Destructive Versioning**: `contradictionDetector.js` identifying conflicting statements and generating gentle clarifications while preserving audit trail via `supersedesObservationId`.
+- **Patient Read-Back Verification Protocol**: `readbackSummarizer.js` delivering an accessible verbal summary before concluding and classifying confirmation responses (`CONFIRM`, `CORRECT`, `REQUEST_REPETITION`, `DECLINE_CONFIRMATION`).
+- **Dual-Write Projection**: Idempotent projection from confirmed `Observation` records into unified `Checkin` collection, preserving 100% backward compatibility with `reportGenerator.js` and `weeklyReportWorker.js`.
+- **Phase 4 & 5 Voice Integration**: Automatic RED flag preemption using emergency safety response, turn abort preservation, and recovery token agenda state serialization.
+- **Phase 6 REST APIs**: Added endpoints for dialogue sessions and observations under `/api/v1` and legacy `/api` namespaces.
+- **Phase 6 Master Test Suite**: Authoring `testClinicalDialogue.js` verifying 77/77 checks across all 22 required clinical criteria and 12 REST API endpoints.
+
+### Changed
+- **Removed Fabricated Data (Priority 0)**: Removed all synthetic measurements (`hours: 7.5`, `estimatedMl: 2000`, `activity: 30`, `Lisinopril`) from fallback engine (`healthConversationAgent.js`).
+- Updated `Checkin.js` with `dialogueSessionId`, `confirmedByPatient`, `confirmedAt`, and weekly geriatric surveillance fields.
+- Updated `Conversation.js` with `dialogueSessionId`, `confirmationStatus`, and `agendaState`.
+- Updated OpenAPI 3.1 specification (`docs/openapi.yaml`).
+
 ## [1.5.0] - 2026-11-03
 
 ### Added

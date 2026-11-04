@@ -1,4 +1,4 @@
-import { Conversation, Patient, Checkin } from '../models/index.js';
+import { Conversation, Patient, Checkin, DialogueSession } from '../models/index.js';
 import { createAssemblyAISTTStream } from '../services/voice/stt/assemblyAISTT.js';
 import { processConversationTurn } from '../services/voice/llm/healthConversationAgent.js';
 import { runSafetyNetCheck } from '../services/safety/keywordSafetyNet.js';
@@ -10,6 +10,8 @@ import { TurnManager } from '../services/voice/session/turnManager.js';
 import { sessionRecoveryManager } from '../services/voice/session/sessionRecoveryManager.js';
 import { voiceResourceLimiter } from '../services/voice/protocol/voiceResourceLimiter.js';
 import { VoiceMetricsCollector } from '../services/voice/metrics/voiceMetricsCollector.js';
+import { ClinicalDialogueManager, activeAgendas } from '../services/dialogue/clinicalDialogueManager.js';
+import { ObservationQualityEngine } from '../services/observations/observationQualityEngine.js';
 
 // In-memory active voice sessions dictionary: Map<socketId, sessionState>
 export const activeSessions = new Map();
@@ -112,10 +114,25 @@ async function callLLM(userTranscript, session, socket, activeTurn) {
   });
 
   const startTime = Date.now();
-  const responseText = await processConversationTurn(userTranscript, session, {
-    signal,
-    turnId,
-  });
+  let responseText = '';
+
+  try {
+    if (session.patientId && session.conversationId) {
+      responseText = await ClinicalDialogueManager.processTurn(userTranscript, session, {
+        signal,
+        turnId,
+      });
+    }
+  } catch (diagErr) {
+    console.warn('[Clinical Dialogue Manager Notice]', diagErr.message);
+  }
+
+  if (!responseText && !signal?.aborted) {
+    responseText = await processConversationTurn(userTranscript, session, {
+      signal,
+      turnId,
+    });
+  }
 
   const durationMs = Date.now() - startTime;
   if (session.metrics) {
@@ -285,10 +302,25 @@ export const initVoiceSocket = (io) => {
               });
 
               // Run safety net check and LLM turn processing in parallel
-              const [, responseText] = await Promise.all([
+              const [safetyFlags, rawResponseText] = await Promise.all([
                 runSafetyNetCheck(finalTranscript, sessionState),
                 callLLM(finalTranscript, sessionState, socket, activeTurn),
               ]);
+
+              let responseText = rawResponseText;
+              // Phase 5 RED Safety Net Preemption: Immediately override response with emergency protocol
+              const redFlag = Array.isArray(safetyFlags) ? safetyFlags.find((f) => f && (f.severity === 'red' || f.severity === 'RED')) : null;
+              if (redFlag) {
+                console.warn(`🚨 [SAFETY PREEMPTION] Preempting routine dialogue for RED flag '${redFlag.category}'`);
+                try {
+                  const dialogueSession = await DialogueSession.findOne({ conversationId: sessionState.conversationId });
+                  if (dialogueSession) {
+                    responseText = await ClinicalDialogueManager.preemptForSafety(dialogueSession, redFlag);
+                  }
+                } catch (e) {
+                  console.warn('[Safety Preemption Warning]', e.message);
+                }
+              }
 
               // Check if turn was cancelled while LLM was processing
               if (!turnManager.isTurnActive(activeTurn.turnId) || activeTurn.abortController.signal.aborted) {
@@ -561,6 +593,13 @@ export const initVoiceSocket = (io) => {
         metrics,
       };
 
+      // Restore clinical dialogue agenda state
+      try {
+        await ClinicalDialogueManager.recoverSession(conversationId);
+      } catch (recErr) {
+        console.warn('[Dialogue Recovery Notice]:', recErr.message);
+      }
+
       sessionState.sttStream = createAssemblyAISTTStream(socket, async (finalTranscript, confidence, isUncertain) => {
         try {
           if (fsm.canTransition(VOICE_STATES.PROCESSING)) {
@@ -574,10 +613,24 @@ export const initVoiceSocket = (io) => {
             isUncertain,
           });
 
-          const [, responseText] = await Promise.all([
+          const [safetyFlags, rawResponseText] = await Promise.all([
             runSafetyNetCheck(finalTranscript, sessionState),
             callLLM(finalTranscript, sessionState, socket, activeTurn),
           ]);
+
+          let responseText = rawResponseText;
+          const redFlag = Array.isArray(safetyFlags) ? safetyFlags.find((f) => f && (f.severity === 'red' || f.severity === 'RED')) : null;
+          if (redFlag) {
+            console.warn(`🚨 [SAFETY PREEMPTION] Preempting routine dialogue for RED flag '${redFlag.category}'`);
+            try {
+              const dialogueSession = await DialogueSession.findOne({ conversationId: sessionState.conversationId });
+              if (dialogueSession) {
+                responseText = await ClinicalDialogueManager.preemptForSafety(dialogueSession, redFlag);
+              }
+            } catch (e) {
+              console.warn('[Safety Preemption Warning]', e.message);
+            }
+          }
 
           if (!turnManager.isTurnActive(activeTurn.turnId) || activeTurn.abortController.signal.aborted) {
             return;
@@ -691,6 +744,16 @@ export const initVoiceSocket = (io) => {
           summary: `Voice check-in completed. ${Math.round(session.history.length / 2)} dialogue turns recorded.`,
         });
 
+        // Idempotently project confirmed observations to Checkin
+        try {
+          const dialogueSession = await DialogueSession.findOne({ conversationId: session.conversationId });
+          if (dialogueSession && dialogueSession.sessionStatus !== 'COMPLETED') {
+            await ObservationQualityEngine.projectToCheckin(dialogueSession, dialogueSession.confirmationStatus || 'BYPASSED');
+          }
+        } catch (projErr) {
+          console.warn('[Dialogue Session Finalization Notice]:', projErr.message);
+        }
+
         if (session.fsm.canTransition(VOICE_STATES.COMPLETED)) {
           session.fsm.transition(VOICE_STATES.COMPLETED);
           emitStateChange(socket, session, VOICE_STATES.FINALIZING, VOICE_STATES.COMPLETED);
@@ -750,6 +813,7 @@ export const initVoiceSocket = (io) => {
           }
 
           try {
+            const agenda = activeAgendas.get(session.conversationId);
             const recoveryToken = sessionRecoveryManager.createRecoveryToken({
               sessionId: socket.id,
               conversationId: session.conversationId,
@@ -759,6 +823,7 @@ export const initVoiceSocket = (io) => {
               history: session.history,
               lastAckSeq: session.audioChunksReceived,
               startedAt: session.startedAt,
+              agendaState: agenda ? agenda.serialize() : null,
             });
 
             console.log(`[Voice Recovery] Created 5-min resume token for session ${socket.id}: ${recoveryToken.slice(0, 10)}...`);

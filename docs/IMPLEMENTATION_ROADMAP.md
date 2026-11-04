@@ -125,20 +125,28 @@ Baseline Audit     API & v1           Tenancy & Auth     Consent &          Voic
 
 ---
 
-## Phase 6: Clinical Dialogue Manager & Observation Quality (Status: ⏳ NEXT)
-* **Key Tasks**:
-  1. Extract `keywordSafetyNet.js` patterns into a versioned clinical rules package (`server/src/rules/v1/clinicalSafetyRules.json`).
-  2. Create `EscalationOutbox` collection to record pending SMS/Email dispatches before network transmission.
-  3. Implement provider status webhooks:
-     - `POST /api/v1/webhooks/twilio/status` (reconciles `queued`, `sent`, `delivered`, `failed`)
-     - `POST /api/v1/webhooks/resend/events` (reconciles `sent`, `delivered`, `bounced`)
-  4. Add clinician flag lifecycle endpoints (`POST /api/v1/flags/:id/acknowledge`, `POST /api/v1/flags/:id/assign`, `POST /api/v1/flags/:id/resolve`).
-  5. Add organization-specific acknowledgement SLA monitoring (escalate to backup on-call doctor if unacknowledged within SLA).
-* **Exit Criteria**: Delivery state transitions from `QUEUED` ➔ `SENT` ➔ `DELIVERED` via webhooks; clinician acknowledgement stops SLA escalation.
+## Phase 6: Clinical Dialogue Manager & Observation Quality (Status: ✅ COMPLETED)
+* **Goal**: Build a reliable clinical dialogue manager that allows Companio to conduct natural daily and weekly wellness check-ins, extract accurate structured observations with LOINC mappings, identify missing or contradictory information, and obtain patient confirmation.
+* **Deliverables**:
+  - Removed all synthetic fabricated data (`hours: 7.5`, `estimatedMl: 2000`, `activity: 30`, `Lisinopril`) from fallback engine (`healthConversationAgent.js`).
+  - Server-Authoritative Dialogue Manager & Agenda State Machine (`server/src/services/dialogue/clinicalDialogueManager.js`, `dialogueAgenda.js`).
+  - Strict Single-Question Policy (`server/src/services/dialogue/questionPlanner.js`) to eliminate cognitive load for older adults (55+).
+  - Daily (2-3 min, rapid triage) and Weekly (5-7 min, geriatric surveillance: falls, mobility aids, loneliness, weight, refills) Workflows (`dailyCheckinWorkflow.js`, `weeklyCheckinWorkflow.js`).
+  - Dialogue Session Model (`server/src/models/DialogueSession.js`) with section progression tracking and idempotent finalization.
+  - Clinical Observation Model (`server/src/models/Observation.js`) with verified LOINC concept mappings (e.g. `59556-1`, `93832-4`, `87625-0`).
+  - Observation Bounds & Missing Data Engine (`observationValidator.js`, `observationExtractor.js`) enforcing physiological bounds and preserving missing data semantics (`NOT_ASKED`, `DECLINED`, `UNKNOWN`); never converts missing values to zero.
+  - Contradiction Detection Engine (`server/src/services/observations/contradictionDetector.js`) detecting intra-session numeric/boolean conflicts and performing non-destructive reconciliation (`supersedesObservationId`, `RETRACTED`).
+  - Verbal Read-Back Verification Protocol (`server/src/services/dialogue/readbackSummarizer.js`) classifying confirmation intents (`CONFIRM`, `CORRECT`, `REQUEST_REPETITION`, `DECLINE_CONFIRMATION`).
+  - Idempotent Dual-Write Checkin Projection (`observationQualityEngine.js`) guaranteeing 100% backward compatibility with `computeClinicalTrends` and `weeklyReportWorker.js`.
+  - Voice Gateway & Safety Net Preemption Integration (`voiceSession.js`): RED safety concerns immediately preempt routine agenda; session recovery serializes agenda state.
+  - Versioned REST APIs for dialogue sessions and observations under `/api/v1` and legacy `/api`.
+  - Automated Master Verification Suite: `server/src/testClinicalDialogue.js` (77/77 checks passing across all 22 required clinical criteria and 12 REST API endpoints).
+  - Specifications: `docs/CLINICAL_DIALOGUE_ARCHITECTURE.md`, `docs/OBSERVATION_DATA_MODEL.md`, `docs/OBSERVATION_QUALITY_RULES.md`, `docs/DAILY_AND_WEEKLY_WORKFLOWS.md`, `docs/PATIENT_CONFIRMATION_WORKFLOW.md`, `docs/PHASE_6_COMPLETION_REPORT.md`.
+* **Exit Criteria**: 100% of Phase 6 automated checks passing (77/77); 100% voice checks passing (40/40); 100% safety checks passing (162/162); report generation and weekly cron batch passing (18/18); frontend production build passing; zero regressions. (Met on 2026-11-04)
 
 ---
 
-## Phase 7: Deterministic Reporting & Clinician Attestation
+## Phase 7: Deterministic Reporting & Clinician Attestation (Status: ⏳ NEXT)
 * **Goal**: Ensure 100% of clinical numbers are calculated by deterministic code, enforce strict JSON schemas on AI summaries, and introduce clinician review/approval states.
 * **Key Tasks**:
   1. Implement Report states: `draft`, `in_review`, `approved`, `amended`, `rejected`.

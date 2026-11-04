@@ -718,6 +718,211 @@ paths:
         '200':
           description: List of conversational interactions and speech transcripts
 
+  /patients/{patientId}/dialogue-sessions:
+    post:
+      summary: Initialize Clinical Dialogue Session
+      description: Initiates a structured daily or weekly clinical check-in dialogue session.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                templateId:
+                  type: string
+                  enum: [DAILY_WELLNESS_CHECKIN, WEEKLY_HEALTH_REVIEW]
+                conversationId:
+                  type: string
+      responses:
+        '201':
+          description: Dialogue session created and agenda initialized
+
+  /dialogue-sessions/{id}:
+    get:
+      summary: Retrieve Dialogue Session
+      description: Retrieves dialogue session state, current agenda stage, and confirmation status.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dialogue session details
+
+  /dialogue-sessions/{id}/progress:
+    get:
+      summary: Retrieve Dialogue Session Progress
+      description: Retrieves section progression, turn count, and pending clarifications.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Session progress metrics
+
+  /dialogue-sessions/{id}/observations:
+    get:
+      summary: Retrieve Observations for Dialogue Session
+      description: Retrieves all clinical observations collected during the dialogue session.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of session observations
+
+  /dialogue-sessions/{id}/clarifications:
+    post:
+      summary: Resolve Contradiction Clarification
+      description: Resolves a contradiction or ambiguous observation with patient input.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Clarification resolved
+
+  /dialogue-sessions/{id}/confirm:
+    post:
+      summary: Confirm or Dispute Dialogue Session Observations
+      description: Records explicit patient read-back confirmation status and projects to Checkin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Session confirmed and projected
+
+  /dialogue-sessions/{id}/finalize:
+    post:
+      summary: Finalize Dialogue Session Idempotently
+      description: Idempotently finalizes session and synthesizes verified Checkin document.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Session finalized
+
+  /patients/{patientId}/observations:
+    get:
+      summary: Retrieve Patient Observations
+      description: Retrieves time-series clinical observations with provenance and LOINC mappings.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated observations list
+
+  /observations:
+    get:
+      summary: List Observations
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Observations list
+    post:
+      summary: Create Clinical Observation
+      description: Persists a validated clinical observation with provenance.
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Observation created
+
+  /observations/{id}:
+    get:
+      summary: Get Observation Details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Observation details
+
+  /observations/{id}/amend:
+    post:
+      summary: Amend Clinical Observation
+      description: Amends an observation with non-destructive versioning and audit trail.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Observation amended and superseded
+
+  /observations/{id}/verify:
+    post:
+      summary: Verify Observation (Clinician Only)
+      description: Records clinical verification or rejection by assigned care team.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Observation verified
+
 components:
   securitySchemes:
     bearerAuth:

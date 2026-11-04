@@ -41,7 +41,7 @@ const membershipSchema = new mongoose.Schema(
     permissions: {
       type: [String],
       default: function () {
-        return DEFAULT_ROLE_PERMISSIONS[this.role] || [];
+        return (this && this.role && DEFAULT_ROLE_PERMISSIONS[this.role]) ? DEFAULT_ROLE_PERMISSIONS[this.role] : [];
       },
     },
     teamIds: [

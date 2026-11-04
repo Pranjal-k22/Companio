@@ -282,3 +282,67 @@ All endpoints require authentication and are scoped to the active organization t
 ### 6.8 `GET /api/v1/flags/patient/:patientId`
 - **Access**: Clinician / Admin / Patient Self
 - **Description**: Retrieves all clinical flags associated with a specific patient, ordered newest first.
+
+
+---
+
+## 7. Clinical Dialogue Sessions Endpoints
+
+### 7.1 `POST /api/v1/patients/:patientId/dialogue-sessions`
+- **Access**: Care-team Clinician / Patient Self
+- **Body**: `{ templateId?: "DAILY_WELLNESS_CHECKIN" | "WEEKLY_HEALTH_REVIEW", conversationId?: string }`
+- **Description**: Initiates a structured clinical dialogue session and returns active agenda.
+
+### 7.2 `GET /api/v1/dialogue-sessions/:id`
+- **Access**: Care-team Clinician / Patient Self
+- **Description**: Retrieves dialogue session state, current section, and confirmation status.
+
+### 7.3 `GET /api/v1/dialogue-sessions/:id/progress`
+- **Access**: Care-team Clinician / Patient Self
+- **Description**: Retrieves completed, skipped, and declined sections, turn count, and pending clarifications.
+
+### 7.4 `GET /api/v1/dialogue-sessions/:id/observations`
+- **Access**: Care-team Clinician / Patient Self
+- **Description**: Retrieves all clinical observations collected during the session with provenance.
+
+### 7.5 `POST /api/v1/dialogue-sessions/:id/clarifications`
+- **Access**: Care-team Clinician / Patient Self
+- **Body**: `{ questionId: string, resolvedValue: any }`
+- **Description**: Resolves a contradiction or ambiguous observation with patient input.
+
+### 7.6 `POST /api/v1/dialogue-sessions/:id/confirm`
+- **Access**: Care-team Clinician / Patient Self
+- **Body**: `{ confirmationStatus: "CONFIRMED" | "DISPUTED" | "BYPASSED", readbackTranscript?: string }`
+- **Description**: Records explicit patient verbal read-back confirmation and triggers projection to Checkin.
+
+### 7.7 `POST /api/v1/dialogue-sessions/:id/finalize`
+- **Access**: Care-team Clinician / Patient Self
+- **Description**: Idempotently finalizes the session and synthesizes verified Checkin document.
+
+---
+
+## 8. Clinical Observations Endpoints
+
+### 8.1 `GET /api/v1/patients/:patientId/observations`
+- **Access**: Care-team Clinician / Patient Self
+- **Query Params**: `category`, `code`, `confirmationStatus`, `page`, `limit`
+- **Description**: Retrieves paginated time-series clinical observations with provenance and LOINC codes.
+
+### 8.2 `GET /api/v1/observations/:id`
+- **Access**: Care-team Clinician / Patient Self
+- **Description**: Retrieves single observation details by ObjectId.
+
+### 8.3 `POST /api/v1/observations`
+- **Access**: Care-team Clinician
+- **Body**: Observation schema with `observationCode`, `observationCategory`, `valueType`, `valueQuantity`, `valueString`, `valueBoolean`, or `missingReason`.
+- **Description**: Persists a validated clinical observation.
+
+### 8.4 `POST /api/v1/observations/:id/amend`
+- **Access**: Care-team Clinician / Patient Self
+- **Body**: Updated value payload and required `correctionReason`.
+- **Description**: Non-destructive amendment; marks old observation `RETRACTED` and creates superseding record.
+
+### 8.5 `POST /api/v1/observations/:id/verify`
+- **Access**: Clinician / Admin only
+- **Body**: `{ verificationStatus: "VERIFIED" | "REJECTED", clinicalRationale?: string }`
+- **Description**: Clinician verification and attestation of health observation.

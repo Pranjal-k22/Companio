@@ -18,6 +18,8 @@ import ConsentRecord, {
   CONSENT_ACTOR_ROLES,
 } from './ConsentRecord.js';
 import SafetyRule, { APPROVED_CATEGORIES, ALL_APPROVED_CATEGORIES } from './SafetyRule.js';
+import DialogueSession from './DialogueSession.js';
+import Observation, { LOINC_MAPPINGS } from './Observation.js';
 
 export {
   User,
@@ -41,6 +43,9 @@ export {
   SafetyRule,
   APPROVED_CATEGORIES,
   ALL_APPROVED_CATEGORIES,
+  DialogueSession,
+  Observation,
+  LOINC_MAPPINGS,
 };
 
 export default {
@@ -59,4 +64,6 @@ export default {
   Invitation,
   ConsentRecord,
   SafetyRule,
+  DialogueSession,
+  Observation,
 };

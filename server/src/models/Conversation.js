@@ -61,8 +61,26 @@ const conversationSchema = new mongoose.Schema(
       enum: ['Red Flag', 'Yellow Flag', 'Stable', 'red', 'yellow', 'none'],
       default: 'Stable',
     },
+    dialogueSessionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'DialogueSession',
+      index: true,
+    },
+    confirmationStatus: {
+      type: String,
+      enum: ['UNCONFIRMED', 'CONFIRMED', 'DISPUTED', 'BYPASSED'],
+      default: 'UNCONFIRMED',
+      index: true,
+    },
+    agendaState: {
+      type: mongoose.Schema.Types.Mixed,
+    },
     turns: [
       {
+        turnId: {
+          type: String,
+          trim: true,
+        },
         role: {
           type: String,
           enum: ['user', 'assistant', 'system'],

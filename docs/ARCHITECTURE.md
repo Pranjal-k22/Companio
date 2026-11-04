@@ -1,7 +1,7 @@
 # 🏛️ Companio — System Architecture & Engineering Blueprint
 
 **Document Reference**: `docs/ARCHITECTURE.md`  
-**Current Milestone**: Phase 5 (Clinical Safety Net, Risk Engine & Escalation Orchestration)  
+**Current Milestone**: Phase 6 (Clinical Dialogue Manager & Observation Quality Engine)  
 **Repository Baseline**: `main`
 
 ---
@@ -263,3 +263,34 @@ Prior to starting a speech session on `/voice`:
 - Background worker `escalationMonitorWorker` automatically escalates breached flags to Tier 2 on-call clinical supervisors.
 
 
+
+---
+
+## 12. Clinical Dialogue Manager & Observation Quality (Phase 6)
+
+### 12.1 Server-Authoritative Dialogue Governance
+- Replaces unbounded generative dialogue with a finite-state agenda (`clinicalDialogueManager.js`, `dialogueAgenda.js`).
+- Enforces strict single-question delivery (`questionPlanner.js`) to prevent cognitive overload for adults 55+.
+- Differentiates daily rapid triage (`dailyCheckinWorkflow.js`, 2–3 min) from comprehensive weekly geriatric surveillance (`weeklyCheckinWorkflow.js`, 5–7 min).
+
+### 12.2 Atomic Observation Model & Provenance
+- Standardized `Observation` model decoupling health assertions from monolithic check-ins.
+- Verified LOINC terminology mappings (e.g. `59556-1` for adherence, `93832-4` for sleep, `87625-0` for falls).
+- Captures turn correlation (`turnId`), verbatim source quotes, confidence, and performer types.
+
+### 12.3 Bounds Validation & Missing Data Semantics
+- `ObservationValidator` enforces physiological plausible ranges and unit normalization.
+- Strict clinical invariant: missing values are NEVER converted to zero; preserved with explicit clinical reason codes (`NOT_ASKED`, `DECLINED`, `UNKNOWN`, `UNABLE_TO_ASSESS`).
+
+### 12.4 Contradiction Engine & Non-Destructive Reconciliation
+- `ContradictionDetector` catches intra-session numeric and boolean discrepancies.
+- Generates gentle clarification prompts without accusing the senior.
+- Preserves superseded observations as `RETRACTED` and links new records via `supersedesObservationId`.
+
+### 12.5 Patient Read-Back & Confirmation Protocol
+- `ReadbackSummarizer` translates collected metrics into warm, accessible speech before finalizing.
+- Classifies patient response (`CONFIRM`, `CORRECT`, `REQUEST_REPETITION`, `DECLINE_CONFIRMATION`).
+- Marks observations `CONFIRMED` only upon explicit patient affirmation.
+
+### 12.6 Idempotent Checkin Projection
+- `ObservationQualityEngine.projectToCheckin()` performs atomic upsert into `Checkin`, preserving 100% backward compatibility with `computeClinicalTrends` and `weeklyReportWorker`.

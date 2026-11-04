@@ -71,6 +71,45 @@ const checkinSchema = new mongoose.Schema(
       default: 0,
     },
     patientConcerns: [{ type: String, trim: true }],
+    dialogueSessionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'DialogueSession',
+      index: true,
+    },
+    confirmedByPatient: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    confirmedAt: {
+      type: Date,
+    },
+    confirmationMethod: {
+      type: String,
+      enum: ['VOICE_READBACK', 'MANUAL_UI', 'AUTO_TIMEOUT', 'CLINICIAN_ENTERED'],
+    },
+    falls: {
+      reported: { type: Boolean, default: false },
+      count: { type: Number, default: 0, min: 0 },
+      injuryReported: { type: Boolean, default: false },
+      notes: { type: String, trim: true },
+    },
+    mobility: {
+      assistiveDeviceUsed: { type: String, trim: true },
+      difficultyWalking: { type: Boolean, default: false },
+      notes: { type: String, trim: true },
+    },
+    socialIsolation: {
+      score: { type: Number, min: 1, max: 10 },
+      notes: { type: String, trim: true },
+    },
+    medicationRefills: {
+      refillNeeded: { type: Boolean, default: false },
+      details: { type: String, trim: true },
+    },
+    weight: {
+      type: mongoose.Schema.Types.Mixed,
+    },
     organizationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Organization',
