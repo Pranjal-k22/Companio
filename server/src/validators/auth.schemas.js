@@ -39,3 +39,12 @@ export const updateProfileSchema = z.object({
     .optional(),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().trim().email('Please provide a valid email address.').toLowerCase(),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().trim().min(1, 'Reset token is required.'),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters long.'),
+});
+

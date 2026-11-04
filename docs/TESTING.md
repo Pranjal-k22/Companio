@@ -14,6 +14,12 @@ Companio enforces strict, multi-layer automated verification with 100% independe
 ## 2. Test Execution Commands
 
 ```bash
+# Phase 12: Controlled End-to-End Pilot & Synthetic Validation Master Suite
+npm run test:pilot
+
+# Phase 12: Cryptographic Password Recovery & Session Revocation Suite
+npm run test:recovery
+
 # Phase 11: Real Backup & Restore Verification Drill
 npm run test:drill
 
@@ -44,6 +50,41 @@ npm run test:voice
 # Frontend Production Compilation
 npm run build:client
 ```
+
+---
+
+## 2.1 Phase 12 Controlled End-to-End Pilot Suite Matrix (`npm run test:pilot`)
+
+| Stage | Scope Verified | Critical Invariants Evaluated |
+| :--- | :--- | :--- |
+| **Stage 1** | Multi-Tenant Clinic Provisioning | Tenant Org A (`clinic`) != Org B (`hospital`); zero foreign key leakage. |
+| **Stage 2** | Senior Patient Risk Baseline | 74yo Arthur Pendelton with Hypertension & Post-CABG correctly assigned to Org A. |
+| **Stage 3** | Tier-3 Granular Consent | Verification of `MICROPHONE`, `LIVE_TRANSCRIPTION`, `AI_PROCESSING`, `CLINICIAN_SHARING`. |
+| **Stage 4** | Multi-Turn Voice Dialogue | 4 conversational turns stored with role integrity and dialogue session link. |
+| **Stage 5** | Structured Observation Extraction | FHIR/LOINC standardized coding (`72514-3`, `75325-1`), quality validation, and provenance. |
+| **Stage 6** | Clinical Safety Net Evaluation | Deterministic detection of RED flags (`chest_pain`, `severe_breathlessness`); emergency 911 directive. |
+| **Stage 7** | Durable Outbox & Background Queue | EscalationEvent dispatched via BullMQ on live Redis 8, transitioned to `DELIVERED`. |
+| **Stage 8** | Retrospective Clinical Report | 7-day rollup with medication adherence (100%), flags, and draft status `PENDING_REVIEW`. |
+| **Stage 9** | Clinician Attestation & Immutability | SHA-256 hash signing by attending physician; double-signing rejected with `BadRequestError`. |
+| **Stage 10** | Caregiver Scoped Grants & RBAC | Granular scope (`WELLNESS_SUMMARY_READ`) allowed; ungranted scope (`OBSERVATIONS_READ`) blocked. |
+| **Stage 11** | Cross-Tenant Breach Prevention | Foreign clinician and caregiver queries under Org B return null / 0 records; cross-attestation blocked. |
+
+---
+
+## 2.2 Phase 12 Password Recovery & Session Revocation Suite Matrix (`npm run test:recovery`)
+
+| Check # | Scope Verified | Critical Security Invariants Evaluated |
+| :--- | :--- | :--- |
+| **Check 1** | Endpoint Registration | Routes mounted under `POST /api/v1/auth/forgot-password` and `POST /api/v1/auth/reset-password`. |
+| **Check 2** | User Enumeration Defense | Submitting unregistered email returns uniform generic HTTP 200 without exposing account existence. |
+| **Check 3** | Token Generation & Storage | Raw 64-char hex token generated; SHA-256 hash stored in MongoDB; raw token never persisted. |
+| **Check 4** | Token Expiration Enforcement | Reset tokens expire after 1 hour; expired tokens rejected with `BadRequestError` / 400. |
+| **Check 5** | Single-Use Token Burn | Once redeemed, reset token is immediately cleared; replay attack rejected. |
+| **Check 6** | Password Bcrypt Update | User can log in with new password; old password fails bcrypt authentication. |
+| **Check 7** | Immediate Session Revocation | `User.passwordChangedAt` invalidates all existing JWT bearer tokens issued prior to reset. |
+| **Check 8** | Invalid Token Rejection | Tampered or malformed reset token strings are rejected. |
+| **Check 9** | Input Validation via Zod | Password complexity and email formatting enforced by Zod schemas. |
+| **Check 10** | Rate Limiting Defense | Brute-force attacks throttled by `authLimiter`. |
 
 ---
 

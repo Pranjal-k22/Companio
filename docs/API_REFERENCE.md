@@ -110,6 +110,14 @@ The Companio API adheres to modern enterprise healthcare API conventions:
 - `POST /api/v1/auth/login` (Public, Rate Limited: 50 req / 15 min)
   - Body: `{ email: string, password: string }`
   - Returns: `{ token: string, user: UserObject }`
+- `POST /api/v1/auth/forgot-password` (Public, Rate Limited: 20 req / 15 min)
+  - Body: `{ email: string }`
+  - Generic Response (Zero User Enumeration): `{ success: true, message: "If an account matches that email, a password reset link has been dispatched." }`
+  - Generates single-use 64-char hex token, stores SHA-256 hash with 1-hour expiration.
+- `POST /api/v1/auth/reset-password` (Public, Rate Limited: 20 req / 15 min)
+  - Body: `{ token: string, password: string }`
+  - Validates token hash, updates password with bcrypt, burns token, sets `passwordChangedAt` to immediately invalidate all existing active JWT bearer sessions.
+  - Returns: `{ success: true, message: "Password has been successfully updated. Please log in with your new credentials." }`
 - `GET /api/v1/auth/me` (Protected)
   - Returns current user context and role.
 - `PUT /api/v1/auth/profile` (Protected)

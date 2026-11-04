@@ -25,6 +25,14 @@ export const verifyToken = async (req, res, next) => {
       return next(new AuthenticationError('Invalid token. User account no longer exists.'));
     }
 
+    // Session invalidation: reject tokens issued before the most recent password change/reset
+    if (user.passwordChangedAt && decoded.iat) {
+      const changedTimestamp = Math.floor(user.passwordChangedAt.getTime() / 1000);
+      if (decoded.iat < changedTimestamp) {
+        return next(new AuthenticationError('Password recently changed. Please log in again with your new credentials.'));
+      }
+    }
+
     // Attach user information to request
     req.user = {
       _id: user._id,

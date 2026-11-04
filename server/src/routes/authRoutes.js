@@ -1,10 +1,23 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { register, login, getMe, updateProfile } from '../controllers/authController.js';
+import {
+  register,
+  login,
+  getMe,
+  updateProfile,
+  forgotPassword,
+  resetPassword,
+} from '../controllers/authController.js';
 import { switchActiveOrganization } from '../controllers/organizationController.js';
 import { verifyToken } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validate.js';
-import { loginSchema, registerSchema, updateProfileSchema } from '../validators/auth.schemas.js';
+import {
+  loginSchema,
+  registerSchema,
+  updateProfileSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+} from '../validators/auth.schemas.js';
 import { switchOrganizationSchema } from '../validators/organization.schemas.js';
 
 const router = express.Router();
@@ -29,6 +42,8 @@ const authLimiter = rateLimit({
 // Public routes with Zod schema validation
 router.post('/register', validateRequest({ body: registerSchema }), register);
 router.post('/login', authLimiter, validateRequest({ body: loginSchema }), login);
+router.post('/forgot-password', authLimiter, validateRequest({ body: forgotPasswordSchema }), forgotPassword);
+router.post('/reset-password', authLimiter, validateRequest({ body: resetPasswordSchema }), resetPassword);
 
 // Protected routes
 router.get('/me', verifyToken, getMe);

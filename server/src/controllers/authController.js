@@ -1,7 +1,9 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User, Patient } from '../models/index.js';
 import { sendSuccess } from '../utils/response.js';
+import logger from '../utils/logger.js';
 import {
   ValidationError,
   AuthenticationError,
@@ -242,6 +244,119 @@ export const updateProfile = async (req, res, next) => {
     };
 
     return sendSuccess(res, { user: updatedUser }, { message: 'Profile updated successfully.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @route   POST /api/v1/auth/forgot-password (or /api/auth/forgot-password)
+ * @desc    Request time-limited, single-use password reset token via email/SMS
+ * @access  Public (Rate-limited via authRateLimiter)
+ */
+export const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      throw new ValidationError('Email address is required.');
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail });
+
+    // GENERIC RESPONSE DEFENSE: Never disclose whether the account exists (Prevents User Enumeration)
+    const genericResponse = {
+      message: 'If an account with that email exists, password reset instructions have been sent.',
+    };
+
+    if (!user) {
+      logger.info(`[Auth:ForgotPassword] Reset requested for non-existent email: ${normalizedEmail}`);
+      return sendSuccess(res, genericResponse);
+    }
+
+    // 1. Generate 32-byte cryptographically secure random token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+
+    // 2. Compute SHA-256 hash to store in DB (Never store plaintext token)
+    const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+    // 3. Set expiry to 15 minutes from now
+    const resetExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    user.passwordResetTokenHash = resetTokenHash;
+    user.passwordResetExpiresAt = resetExpiresAt;
+    await user.save();
+
+    logger.info(`[Auth:ForgotPassword] Password reset token generated for user ${user._id} (${user.email}). Expires in 15m.`);
+
+    // In dev / test mode, surface the raw token for automated testing
+    const isDevOrTest = process.env.NODE_ENV !== 'production';
+
+    return sendSuccess(
+      res,
+      {
+        ...genericResponse,
+        ...(isDevOrTest ? { resetToken, expiresAt: resetExpiresAt.toISOString() } : {}),
+      },
+      { statusCode: 200 }
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @route   POST /api/v1/auth/reset-password (or /api/auth/reset-password)
+ * @desc    Reset password using single-use cryptographically verified reset token
+ * @access  Public (Rate-limited via authRateLimiter)
+ */
+export const resetPassword = async (req, res, next) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      throw new ValidationError('Both reset token and new password are required.');
+    }
+
+    if (typeof newPassword !== 'string' || newPassword.length < 8) {
+      throw new ValidationError('New password must be at least 8 characters long.');
+    }
+
+    // 1. Hash incoming token with SHA-256 to compare with database hash
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    // 2. Find user with valid, non-expired token
+    const user = await User.findOne({
+      passwordResetTokenHash: tokenHash,
+      passwordResetExpiresAt: { $gt: new Date() },
+    });
+
+    if (!user) {
+      logger.warn('[Auth:ResetPassword] Attempted reset with invalid or expired token.');
+      throw new ValidationError('Password reset token is invalid or has expired.');
+    }
+
+    // 3. Hash new password
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+
+    // 4. Update password and invalidate token (SINGLE-USE BURN / REPLAY PROTECTION)
+    user.passwordHash = passwordHash;
+    user.passwordResetTokenHash = null;
+    user.passwordResetExpiresAt = null;
+
+    // 5. Invalidate existing sessions: tokens issued before this timestamp will be rejected
+    user.passwordChangedAt = new Date();
+    await user.save();
+
+    logger.info(`[Auth:ResetPassword] Password successfully reset for user ${user._id} (${user.email}). Prior sessions invalidated.`);
+
+    return sendSuccess(
+      res,
+      { message: 'Password has been successfully reset. Please log in with your new credentials.' },
+      { statusCode: 200 }
+    );
   } catch (error) {
     next(error);
   }

@@ -79,4 +79,19 @@ Companio Phase 10 introduces production-grade containerization, health probes, P
 - **Disaster Recovery Runbooks**:
   - 9 operational disaster recovery runbooks available in `docs/PHASE_10_OPERATIONAL_RUNBOOKS.md`.
 
+---
+
+## 7. Phase 12 Controlled Pilot & Production Release Gating
+
+### 7.1 Production Launch Stop Gate & BAA Requirement
+Companio enforces a mandatory regulatory release stop gate:
+- **Commercial Production Deployment**: Strictly prohibited until formal legal execution of Business Associate Agreements (BAAs) with AssemblyAI, Google Cloud, ElevenLabs, Twilio, and Resend.
+- **Stage 2 Usability Pilot Deployment**: Authorized for in-person clinic pilots on dedicated, de-identified tablet hardware under Institutional Review Board (IRB) approved Quality Improvement protocol `#COMPANIO-PILOT-2026-HFE`.
+
+### 7.2 Dedicated Physical Pilot Tablet Staging
+- Devices configured in Single-App Kiosk Mode or Managed Web App sandbox.
+- Audio volume baseline calibrated to 70 dB SPL with hardware button access.
+- Accessible font scaling (`html.text-lg-accessibility`) enabled by default.
+
+
 

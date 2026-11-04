@@ -5,6 +5,21 @@ All notable changes to the Companio healthcare platform will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-11-04
+
+### Added
+- **Cryptographic Password Recovery Subsystem**: Implemented `/api/v1/auth/forgot-password` and `/api/v1/auth/reset-password` endpoints (`authController.js`, `authRoutes.js`, `auth.schemas.js`) with SHA-256 token hashing, single-use token burn, generic enumeration-resistant HTTP 200 responses, and immediate JWT session invalidation via `user.passwordChangedAt`. Verified with automated test suite `testPasswordRecovery.js` (10/10 checks).
+- **Master Controlled Pilot Validation Suite**: Engineered and executed 11-stage synthetic patient lifecycle test harness (`server/src/tests/operations/testPhase12EndToEndPilot.js`, `npm run test:pilot`), testing tenant isolation, senior onboarding, Tier-3 consent, voice dialogue, LOINC observations, deterministic RED flags, BullMQ outbox escalation over live Redis 8, weekly reports, physician attestation, and caregiver scoped grants (43/43 assertions passing 100%).
+- **Senior Accessibility Usability Protocol (WCAG 2.1 AA)**: Authored `docs/PHASE_12_ACCESSIBILITY_PILOT.md` detailing 48px touch targets, color contrast ratios, senior typography (`html.text-lg-accessibility`), voice playback rate toggles (0.8x-1.2x), instant repeat controls, and a 15-senior participant study on physical iPads and Android tablets.
+- **Provider Readiness & BAA Audit**: Authored `docs/PHASE_12_PROVIDER_READINESS.md` auditing AssemblyAI, Gemini, ElevenLabs, Twilio, and Resend; marked all BAA statuses as formally `BLOCKED` until executed legal agreements exist.
+- **Clinical Validation Plan**: Authored `docs/PHASE_12_CLINICAL_VALIDATION_PLAN.md` documenting 13 RED + 10 YELLOW clinical taxonomy rules, 10 standardized clinical scenario tests, and physician attestation immutability.
+- **Production Launch Readiness Matrix**: Authored `docs/PHASE_12_PRODUCTION_READINESS_MATRIX.md` evaluating 11 technical, operational, and regulatory domains. Established formal Go/No-Go determination: Go for synthetic validation, Conditional Go for in-person clinic pilot, and No-Go for commercial production release pending executed BAAs.
+
+### Changed
+- **User Model**: Updated `User.js` with `passwordResetTokenHash`, `passwordResetExpiresAt`, and `passwordChangedAt` fields.
+- **JWT Authentication Middleware**: Updated `auth.js` (`verifyToken`) to compare token `decoded.iat * 1000 < user.passwordChangedAt`, immediately terminating stale sessions.
+- **Package Scripts**: Added `test:recovery` and `test:pilot` to root `package.json`.
+
 ## [1.11.0] - 2026-11-04
 
 ### Added

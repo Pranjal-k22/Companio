@@ -1,7 +1,7 @@
 # 🏛️ Companio — System Architecture & Engineering Blueprint
 
 **Document Reference**: `docs/ARCHITECTURE.md`  
-**Current Milestone**: Phase 11 (Independent Security, Privacy, Compliance & Clinical Readiness Assessment)  
+**Current Milestone**: Phase 12 (Controlled Pilot, End-to-End Validation & Production Launch Readiness)  
 **Repository Baseline**: `main`
 
 ---
@@ -430,6 +430,32 @@ Companio aligns with ISO 14971 medical device risk management standards:
 - Parallel deterministic safety net (13 RED, 10 YELLOW taxonomy categories) with clause segmentation, negation handling, and historical context analysis.
 - Durable safety net: Failed external notification delivery never downgrades or resolves clinical flags.
 - Retrospective clinical reports require human clinician attestation before publication.
+
+---
+
+## 18. Controlled Pilot, End-to-End Validation & Production Launch Readiness (Phase 12)
+
+### 18.1 Cryptographic Password Recovery & Session Revocation
+- **Endpoints**: `POST /api/v1/auth/forgot-password` and `POST /api/v1/auth/reset-password`.
+- **Enumeration Defense**: Returns a uniform generic HTTP 200 response for all submitted email addresses regardless of registration status.
+- **Single-Use Cryptographic Tokens**: Unhashed token delivered to user; SHA-256 hash stored in MongoDB with 1-hour expiration (`passwordResetExpiresAt`).
+- **Session Revocation Invariant**: Updating password sets `User.passwordChangedAt`. `verifyToken` middleware compares JWT `decoded.iat * 1000 < user.passwordChangedAt` and immediately terminates all pre-existing sessions.
+
+### 18.2 Senior Accessibility & Human Factors Ergonomics (WCAG 2.1 AA)
+- **Touch Target Ergonomics**: Enforces minimum 48 × 48 CSS pixels (approx. 9.2 mm on tablets), with mandatory > 8px separation.
+- **Senior Contrast & Scalability**: High-contrast dark mode (17.8:1) and light mode (15.2:1); responsive font scale `html.text-lg-accessibility` scaling rem to 18px–20px.
+- **Voice Control & Auditory Access**: Integrated 0.8x–1.2x speech rate toggle, instant AI response replay button, visual waveform indicator, and live streaming captions.
+- **Physical Tablet Pilot Protocol**: Standardized 6-task usability study for a stratified cohort of 15 older adults (55–85+) across Apple iPad and Android tablets.
+
+### 18.3 Synthetic Master End-to-End Pilot Lifecycle
+- **Automated Validation**: `server/src/tests/operations/testPhase12EndToEndPilot.js` (`npm run test:pilot`) executes an 11-stage synthetic patient journey.
+- **Stages Verified**: Multi-Tenant clinic provisioning, Senior patient risk baseline, Tier-3 granular consent, Multi-turn dialogue check-in, LOINC observation extraction, Deterministic RED flag safety net trigger, Durable outbox escalation over live Redis 8 BullMQ, Weekly clinical report rollup, Physician SHA-256 attestation, Caregiver scoped grant RBAC, and Multi-tenant cross-tenant breach defense.
+- **Verification Result**: 100% PASS across all 43 invariant checks.
+
+### 18.4 External Provider BAA Governance & Release Stop Gate
+- **HIPAA BAA Requirement**: External cloud AI and telephony services (AssemblyAI, Google Gemini, ElevenLabs, Twilio, Resend) are technically integrated but formally marked **BLOCKED** pending execution of legal Business Associate Agreements.
+- **Formal Stop Gate**: General commercial deployment to real patient cohorts is strictly prohibited until BAAs are executed. Controlled usability testing is authorized under IRB / Quality Improvement protocol using de-identified test tablets.
+
 
 
 
