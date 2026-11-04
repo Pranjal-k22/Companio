@@ -3,39 +3,153 @@
 @tailwind utilities;
 
 @layer base {
-  html {
-    transition: background-color 0.3s ease, color 0.3s ease;
-  }
-  
-  html.dark {
-    color-scheme: dark;
-    background-color: #090d16;
+  /* ==========================================================================
+     COMPANIO "BLOOM" DESIGN SYSTEM — SEMANTIC CSS VARIABLES
+     ========================================================================== */
+
+  :root {
+    /* Day Mode Tokens (Bloom Palette: Ivory #EAE6DE, Blue #226192, Coral #EF8557) */
+    --color-canvas: 246 243 236;            /* #F6F3EC */
+    --color-surface: 255 255 255;           /* #FFFFFF */
+    --color-surface-warm: 234 230 222;      /* #EAE6DE */
+    --color-surface-sunken: 239 234 224;    /* #EFEAE0 */
+    --color-border: 217 211 199;            /* #D9D3C7 */
+    --color-border-strong: 185 177 162;     /* #B9B1A2 */
+    --color-text-strong: 15 42 64;          /* #0F2A40 */
+    --color-text-body: 46 74 99;            /* #2E4A63 */
+    --color-text-muted: 74 97 119;          /* #4A6177 */
+    --color-primary: 34 97 146;             /* #226192 */
+    --color-primary-hover: 26 77 117;       /* #1A4D75 */
+    --color-primary-pressed: 20 61 92;      /* #143D5C */
+    --color-on-primary: 255 255 255;        /* #FFFFFF */
+    --color-primary-tint: 220 232 241;      /* #DCE8F1 */
+    --color-accent: 239 133 87;             /* #EF8557 */
+    --color-accent-tint: 251 228 216;       /* #FBE4D8 */
+    --color-on-accent: 15 42 64;            /* #0F2A40 */
+    --color-focus-ring: 34 97 146;          /* #226192 (3px ring, 2px offset) */
+    --color-critical-text: 179 38 30;       /* #B3261E */
+    --color-critical-bg: 251 227 225;       /* #FBE3E1 */
+    --color-critical-border: 244 184 180;   /* #F4B8B4 */
+    --color-caution-text: 138 75 0;         /* #8A4B00 */
+    --color-caution-bg: 252 233 200;        /* #FCE9C8 */
+    --color-caution-border: 247 206 140;    /* #F7CE8C */
+
+    color-scheme: light;
   }
 
-  html.light {
-    color-scheme: light;
-    background-color: #f4f6fb;
+  /* Night Mode Tokens */
+  [data-theme="night"],
+  html.dark {
+    --color-canvas: 11 29 46;               /* #0B1D2E */
+    --color-surface: 18 41 61;              /* #12293D */
+    --color-surface-warm: 26 54 79;         /* #1A364F */
+    --color-surface-sunken: 15 36 56;       /* #0F2438 */
+    --color-border: 42 74 102;              /* #2A4A66 */
+    --color-border-strong: 61 99 133;       /* #3D6385 */
+    --color-text-strong: 234 230 222;       /* #EAE6DE */
+    --color-text-body: 201 207 210;         /* #C9CFD2 */
+    --color-text-muted: 159 177 192;        /* #9FB1C0 */
+    --color-primary: 127 176 216;           /* #7FB0D8 */
+    --color-primary-hover: 156 195 227;     /* #9CC3E3 */
+    --color-primary-pressed: 181 211 234;   /* #B5D3EA */
+    --color-on-primary: 11 29 46;           /* #0B1D2E */
+    --color-primary-tint: 29 65 99;         /* #1D4163 */
+    --color-accent: 239 133 87;             /* #EF8557 */
+    --color-accent-tint: 74 46 36;          /* #4A2E24 */
+    --color-on-accent: 11 29 46;            /* #0B1D2E */
+    --color-focus-ring: 127 176 216;        /* #7FB0D8 */
+    --color-critical-text: 255 138 128;     /* #FF8A80 */
+    --color-critical-bg: 58 23 20;          /* #3A1714 */
+    --color-critical-border: 90 35 31;      /* #5A231F */
+    --color-caution-text: 242 195 107;      /* #F2C36B */
+    --color-caution-bg: 58 42 12;           /* #3A2A0C */
+    --color-caution-border: 92 65 18;       /* #5C4112 */
+
+    color-scheme: dark;
+  }
+
+  /* Auto Theme under System Dark Mode (when not explicitly locked to Day) */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="day"]):not(.light) {
+      --color-canvas: 11 29 46;
+      --color-surface: 18 41 61;
+      --color-surface-warm: 26 54 79;
+      --color-surface-sunken: 15 36 56;
+      --color-border: 42 74 102;
+      --color-border-strong: 61 99 133;
+      --color-text-strong: 234 230 222;
+      --color-text-body: 201 207 210;
+      --color-text-muted: 159 177 192;
+      --color-primary: 127 176 216;
+      --color-primary-hover: 156 195 227;
+      --color-primary-pressed: 181 211 234;
+      --color-on-primary: 11 29 46;
+      --color-primary-tint: 29 65 99;
+      --color-accent: 239 133 87;
+      --color-accent-tint: 74 46 36;
+      --color-on-accent: 11 29 46;
+      --color-focus-ring: 127 176 216;
+      --color-critical-text: 255 138 128;
+      --color-critical-bg: 58 23 20;
+      --color-critical-border: 90 35 31;
+      --color-caution-text: 242 195 107;
+      --color-caution-bg: 58 42 12;
+      --color-caution-border: 92 65 18;
+
+      color-scheme: dark;
+    }
+  }
+
+  /* Global root typography & transitions */
+  html {
+    font-size: 100%; /* Default 16px base rem */
+    transition: background-color 250ms ease, color 250ms ease;
+  }
+
+  /* Continuous Accessible Font Scaling Tiers */
+  html.text-size-100 {
+    font-size: 100%; /* 16px */
+  }
+
+  html.text-size-125,
+  html.text-lg-accessibility {
+    font-size: 125%; /* 20px */
+  }
+
+  html.text-size-150 {
+    font-size: 150%; /* 24px */
   }
 
   body {
-    @apply antialiased font-sans min-h-screen transition-colors duration-200;
+    @apply antialiased font-sans min-h-screen bg-canvas text-text-body;
+    transition: background-color 250ms ease, color 250ms ease;
   }
 
-  .dark body {
-    @apply bg-[#090d16] text-slate-100;
+  /* Accessible focus indicators */
+  :focus-visible {
+    outline: 3px solid rgb(var(--color-focus-ring));
+    outline-offset: 2px;
   }
 
-  .light body {
-    @apply bg-[#f4f6fb] text-slate-800;
+  /* Tabular numbers for all clinical metrics and timestamps */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
   }
 
-  /* Accessibility Large Font Scale */
-  html.text-lg-accessibility {
-    font-size: 112.5%; /* Scales base rem from 16px to ~18px */
+  /* Reduced motion safety override */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
-/* Audio waveform pulse animation */
+/* Audio waveform animation */
 @keyframes pulse-wave {
   0%, 100% { transform: scaleY(0.3); }
   50% { transform: scaleY(1); }
@@ -51,28 +165,15 @@
   height: 6px;
 }
 
-.dark ::-webkit-scrollbar-track {
-  background: #0d1322;
+::-webkit-scrollbar-track {
+  background: rgb(var(--color-surface-sunken));
 }
 
-.dark ::-webkit-scrollbar-thumb {
-  background: #1f293d;
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--color-border-strong));
   border-radius: 9999px;
 }
 
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #0d9488;
-}
-
-.light ::-webkit-scrollbar-track {
-  background: #e2e8f0;
-}
-
-.light ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 9999px;
-}
-
-.light ::-webkit-scrollbar-thumb:hover {
-  background: #0d9488;
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--color-primary));
 }

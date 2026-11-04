@@ -53,9 +53,7 @@ export default function Login() {
 
   return (
     <div
-      className={`min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8 relative overflow-hidden transition-colors duration-200 ${
-        theme === 'dark' ? 'bg-[#090d16] text-slate-100' : 'bg-[#f4f6fb] text-slate-800'
-      }`}
+      className="min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8 relative overflow-hidden transition-colors duration-250 bg-canvas text-text-body"
     >
       {/* Background Ambient Glows */}
       <div className="absolute top-1/4 left-1/3 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-teal-500/10 blur-[150px] rounded-full pointer-events-none" />

@@ -1,184 +1,286 @@
-import React, { useState } from 'react';
-import { useTheme } from '../context/ThemeContext';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import API from '../services/api';
 import {
   UserCheck,
   Stethoscope,
-  Star,
   Phone,
-  MessageSquare,
-  Calendar,
-  Search,
-  Filter,
+  Mail,
+  MapPin,
   ShieldCheck,
+  Building,
+  RefreshCw,
+  AlertCircle,
+  WifiOff,
+  ShieldAlert,
+  Calendar,
 } from 'lucide-react';
+import Button from '../components/ui/Button';
+import EmptyState from '../components/ui/EmptyState';
+import { TableSkeleton } from '../components/common/Skeleton';
 
+/**
+ * PatientDoctors (My Care Team - Verified Data Only)
+ * - Zero hardcoded fake doctors or fabricated reviews
+ * - Fetches real assigned clinician from Patient model
+ * - Fetches active verified organization clinicians from /api/organizations/current
+ * - Full 5-state lifecycle: loading, empty, error, offline, unauthorised
+ */
 export default function PatientDoctors() {
-  const { theme } = useTheme();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedDept, setSelectedDept] = useState('All');
+  const { user } = useAuth();
+  const [patient, setPatient] = useState(null);
+  const [organization, setOrganization] = useState(null);
+  const [careTeamMembers, setCareTeamMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
-  const doctorsList = [
-    {
-      id: 'doc-1',
-      name: 'Dr. Sarah Jenkins',
-      title: 'MD, FACC',
-      department: 'Cardiology',
-      experience: '16 Years Experience',
-      hospital: 'St. Jude Medical Center',
-      rating: '4.9',
-      reviews: 128,
-      status: 'Assigned Primary',
-      avatar: 'SJ',
-    },
-    {
-      id: 'doc-2',
-      name: 'Dr. Michael Chang',
-      title: 'MD, FACE',
-      department: 'Endocrinology',
-      experience: '12 Years Experience',
-      hospital: 'University Health Hospital',
-      rating: '4.8',
-      reviews: 94,
-      status: 'Consulting Specialist',
-      avatar: 'MC',
-    },
-    {
-      id: 'doc-3',
-      name: 'Dr. Elena Rostova',
-      title: 'MD, PhD',
-      department: 'Neurology',
-      experience: '20 Years Experience',
-      hospital: 'Brain & Spine Institute',
-      rating: '5.0',
-      reviews: 210,
-      status: 'Available',
-      avatar: 'ER',
-    },
-    {
-      id: 'doc-4',
-      name: 'Dr. Marcus Vance',
-      title: 'MD, FACP',
-      department: 'General Internal Medicine',
-      experience: '14 Years Experience',
-      hospital: 'Metropolitan Health Network',
-      rating: '4.7',
-      reviews: 86,
-      status: 'Available',
-      avatar: 'MV',
-    },
-  ];
+  // Track offline status
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
-  const filteredDoctors = doctorsList.filter((doc) => {
-    const matchesSearch = doc.name.toLowerCase().includes(searchQuery.toLowerCase()) || doc.department.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesDept = selectedDept === 'All' || doc.department === selectedDept;
-    return matchesSearch && matchesDept;
-  });
+  // Fetch real care team data
+  const fetchCareTeam = async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      let patientId = user?.patientId || user?.patientProfile?._id;
+      if (!patientId) {
+        const meRes = await API.get('/auth/me');
+        patientId = meRes.data?.user?.patientId || meRes.data?.user?.patientProfile?._id;
+      }
+
+      const [patientRes, orgRes] = await Promise.all([
+        patientId ? API.get(`/patients/${patientId}`) : Promise.resolve({ data: { patient: null } }),
+        API.get('/organizations/current').catch(() => ({ data: { organization: null } })),
+      ]);
+
+      if (patientRes.data?.success || patientRes.data?.patient) {
+        setPatient(patientRes.data.patient);
+      }
+      if (orgRes.data?.organization || orgRes.data?.data) {
+        const orgData = orgRes.data.organization || orgRes.data.data;
+        setOrganization(orgData);
+        if (orgData.members) {
+          const clinicalStaff = orgData.members.filter((m) =>
+            ['CLINICIAN', 'ADMIN', 'ORG_OWNER'].includes(m.role)
+          );
+          setCareTeamMembers(clinicalStaff);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load care team:', err);
+      setError(err?.response?.data?.message || 'Failed to sync verified care team records.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCareTeam();
+  }, [user]);
+
+  // 1. Unauthorised State
+  if (user && user.role !== 'PATIENT') {
+    return (
+      <div className="p-8 max-w-xl mx-auto text-center space-y-4">
+        <div className="p-5 rounded-2xl bg-surface border border-border text-xs space-y-2">
+          <ShieldAlert className="w-6 h-6 mx-auto text-caution" />
+          <h2 className="text-sm font-bold text-text-strong">Patient Portal Access Restricted</h2>
+          <p className="text-text-muted">You are signed in as {user.role}. This view is designated for patient care team contact records.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Loading State
+  if (loading) {
+    return (
+      <div className="space-y-6 max-w-4xl mx-auto">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <div className="h-7 w-48 bg-surface rounded-xl animate-pulse" />
+            <div className="h-4 w-64 bg-surface rounded-md animate-pulse" />
+          </div>
+        </div>
+        <TableSkeleton rows={4} />
+      </div>
+    );
+  }
+
+  const assignedClinician = patient?.assignedClinicianId;
 
   return (
-    <div className="space-y-6">
-      {/* Page Title & Search Bar */}
+    <div className="space-y-6 max-w-4xl mx-auto">
+      {/* 3. Offline Notice Banner */}
+      {isOffline && (
+        <aside
+          role="status"
+          className="p-3.5 rounded-2xl bg-surface border border-border text-xs text-text-muted flex items-center gap-2"
+        >
+          <WifiOff className="w-4 h-4 text-caution shrink-0" />
+          <span>Offline mode active. Displaying cached care team details. Reconnect to fetch latest updates.</span>
+        </aside>
+      )}
+
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-extrabold font-display dark:text-white text-slate-900 tracking-tight">
-            Doctors & Specialist Directory
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Connect with your assigned care team and healthcare specialists
+          <h1 className="text-2xl font-black text-text-strong tracking-tight flex items-center gap-2.5">
+            <UserCheck className="w-6 h-6 text-primary" />
+            My Care Team & Health Providers
+          </h1>
+          <p className="text-xs text-text-muted">
+            Verified clinicians, designated care coordinators, and health organization directory
           </p>
         </div>
+
+        <Button
+          size="sm"
+          variant="quiet"
+          className="border border-border self-start sm:self-center"
+          onClick={fetchCareTeam}
+          title="Refresh care team"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
-      {/* Filter and Search Control Bar */}
-      <div className={`p-4 rounded-3xl border flex flex-col sm:flex-row items-center justify-between gap-4 ${
-        theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
-      }`}>
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search doctors by name or specialty..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className={`w-full text-xs font-medium pl-10 pr-4 py-2.5 rounded-2xl border outline-none ${
-              theme === 'dark'
-                ? 'bg-slate-950 border-slate-800 text-slate-200 focus:border-teal-500'
-                : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-teal-600'
-            }`}
-          />
+      {/* 4. Error State */}
+      {error && (
+        <div className="p-4 rounded-2xl bg-critical/10 border border-critical/30 text-critical text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <Button size="sm" variant="secondary" onClick={fetchCareTeam}>
+            Retry
+          </Button>
         </div>
+      )}
 
-        <div className="flex items-center space-x-2 w-full sm:w-auto overflow-x-auto">
-          {['All', 'Cardiology', 'Endocrinology', 'Neurology'].map((dept) => (
-            <button
-              key={dept}
-              onClick={() => setSelectedDept(dept)}
-              className={`px-3.5 py-2 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-                selectedDept === dept
-                  ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-              }`}
-            >
-              {dept}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* PRIMARY ASSIGNED CLINICIAN CARD */}
+      <div className="space-y-3">
+        <h2 className="text-base font-bold text-text-strong">
+          Primary Assigned Clinician
+        </h2>
 
-      {/* Doctors Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {filteredDoctors.map((doc) => (
-          <div
-            key={doc.id}
-            className={`p-6 rounded-3xl border transition-all hover:border-teal-500/50 shadow-sm space-y-4 ${
-              theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200'
-            }`}
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-teal-500 to-emerald-400 text-slate-950 font-extrabold text-lg flex items-center justify-center shadow-md shrink-0">
-                  {doc.avatar}
+        {!assignedClinician ? (
+          <div className="p-6 rounded-2xl bg-surface border border-border text-xs text-text-muted">
+            No primary clinician explicitly assigned yet. Your health records and check-ins are monitored by the clinical on-call team at {organization?.name || 'your healthcare organization'}.
+          </div>
+        ) : (
+          <div className="p-6 rounded-3xl bg-surface border border-primary/30 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-lg">
+                  {assignedClinician.name ? assignedClinician.name.slice(0, 2).toUpperCase() : 'DR'}
                 </div>
-                <div>
-                  <h3 className="font-extrabold text-base dark:text-white text-slate-900">
-                    {doc.name}
-                  </h3>
-                  <p className="text-xs font-bold text-teal-600 dark:text-teal-400">{doc.department} • {doc.title}</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">{doc.hospital}</p>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-base text-text-strong">
+                      {assignedClinician.name || 'Assigned Physician'}
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3" />
+                      Primary Care Doctor
+                    </span>
+                  </div>
+                  <div className="text-xs text-text-muted">
+                    {assignedClinician.role || 'Clinician'} • {organization?.name || 'Affiliated Healthcare Practice'}
+                  </div>
                 </div>
               </div>
-
-              <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border ${
-                doc.status.includes('Primary')
-                  ? 'bg-teal-500/15 text-teal-600 dark:text-teal-300 border-teal-500/30'
-                  : 'bg-slate-500/10 text-slate-400 border-slate-500/30'
-              }`}>
-                {doc.status}
-              </span>
             </div>
 
-            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-800">
-              <span className="flex items-center gap-1 font-bold text-amber-500">
-                <Star className="w-4 h-4 fill-amber-500 text-amber-500" /> {doc.rating} ({doc.reviews} reviews)
-              </span>
-              <span>{doc.experience}</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 pt-2">
-              <button
-                onClick={() => alert(`Starting consultation request with ${doc.name}`)}
-                className="py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs rounded-2xl transition border border-slate-300 dark:border-slate-700 flex items-center justify-center gap-1.5"
-              >
-                <MessageSquare className="w-4 h-4 text-teal-500" /> Message
-              </button>
-              <button
-                onClick={() => alert(`Scheduling appointment with ${doc.name}`)}
-                className="py-2.5 bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold text-xs rounded-2xl transition flex items-center justify-center gap-1.5 shadow-md shadow-teal-500/20"
-              >
-                <Calendar className="w-4 h-4" /> Book Visit
-              </button>
+            {/* Contact details */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-3 border-t border-border">
+              {assignedClinician.email && (
+                <div className="flex items-center gap-2 text-text-body">
+                  <Mail className="w-4 h-4 text-primary shrink-0" />
+                  <span>Email: <strong className="text-text-strong">{assignedClinician.email}</strong></span>
+                </div>
+              )}
+              <div className="flex items-center gap-2 text-text-body">
+                <Building className="w-4 h-4 text-primary shrink-0" />
+                <span>Practice: <strong className="text-text-strong">{organization?.name || 'Clinical Care Net'}</strong></span>
+              </div>
             </div>
           </div>
-        ))}
+        )}
+      </div>
+
+      {/* HEALTHCARE PRACTICE & ORGANIZATION CARD */}
+      {organization && (
+        <div className="p-6 rounded-3xl bg-surface border border-border shadow-sm space-y-3 text-xs">
+          <div className="flex items-center gap-2 text-text-strong font-bold text-sm">
+            <Building className="w-4 h-4 text-primary" />
+            Healthcare Organization Details
+          </div>
+
+          <div className="text-text-body">
+            <strong>{organization.name}</strong>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-text-muted">
+            {organization.contact?.phone && (
+              <div>Clinic Phone: <strong className="text-text-strong">{organization.contact.phone}</strong></div>
+            )}
+            {organization.contact?.email && (
+              <div>Support Email: <strong className="text-text-strong">{organization.contact.email}</strong></div>
+            )}
+            {organization.contact?.address && (
+              <div className="col-span-2">Clinic Address: {organization.contact.address}</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* VERIFIED CLINICAL TEAM DIRECTORY */}
+      <div className="space-y-3">
+        <h2 className="text-base font-bold text-text-strong">
+          Care Team Staff & Specialists
+        </h2>
+
+        {careTeamMembers.length === 0 ? (
+          <div className="p-6 rounded-2xl bg-surface border border-border text-xs text-text-muted text-center">
+            No additional care team specialists listed.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {careTeamMembers.map((member, idx) => (
+              <div
+                key={idx}
+                className="p-4 rounded-2xl bg-surface border border-border space-y-2 text-xs"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-text-strong">{member.name || member.email}</span>
+                  <span className="px-2 py-0.5 rounded bg-canvas border border-border text-[10px] font-semibold text-text-muted">
+                    {member.role}
+                  </span>
+                </div>
+                {member.email && (
+                  <div className="text-[11px] text-text-muted">{member.email}</div>
+                )}
+                <div className="text-[10px] text-primary flex items-center gap-1 pt-1 border-t border-border/50">
+                  <ShieldCheck className="w-3 h-3" />
+                  <span>Verified organization care provider</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

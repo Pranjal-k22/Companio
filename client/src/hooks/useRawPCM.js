@@ -18,7 +18,21 @@ export function useRawPCM(onAudioChunk) {
   const mediaStreamRef = useRef(null);
   const workletNodeRef = useRef(null);
   const sourceNodeRef = useRef(null);
+  const analyserNodeRef = useRef(null);
   const fallbackRecorderRef = useRef(null);
+
+  // Compute real RMS input level in [0, 1] without React re-render
+  const getAudioLevel = useCallback(() => {
+    if (!analyserNodeRef.current) return 0;
+    const dataArray = new Uint8Array(analyserNodeRef.current.frequencyBinCount);
+    analyserNodeRef.current.getByteFrequencyData(dataArray);
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      sum += dataArray[i];
+    }
+    const avg = sum / (dataArray.length || 1);
+    return Math.min(1, avg / 110);
+  }, []);
 
   // Resume or unlock AudioContext on user interaction
   const getOrCreateAudioContext = useCallback(() => {
@@ -96,6 +110,13 @@ export function useRawPCM(onAudioChunk) {
           const source = ctx.createMediaStreamSource(stream);
           const workletNode = new AudioWorkletNode(ctx, 'raw-pcm-processor');
 
+          // Real-time audio analyser for VoiceOrb level visualization
+          const analyser = ctx.createAnalyser();
+          analyser.fftSize = 128;
+          analyser.smoothingTimeConstant = 0.5;
+          source.connect(analyser);
+          analyserNodeRef.current = analyser;
+
           workletNode.port.onmessage = (event) => {
             if (event.data instanceof ArrayBuffer && onAudioChunk) {
               onAudioChunk(event.data);
@@ -152,7 +173,7 @@ export function useRawPCM(onAudioChunk) {
     };
   }, [stopRecording]);
 
-  return { isRecording, error, startRecording, stopRecording };
+  return { isRecording, error, startRecording, stopRecording, getAudioLevel };
 }
 
 export default useRawPCM;

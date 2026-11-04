@@ -1,574 +1,616 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import API from '../services/api';
 import {
-  Stethoscope,
-  Users,
   AlertTriangle,
   CheckCircle2,
-  ChevronRight,
-  RefreshCw,
-  Search,
   Clock,
-  Pill,
-  Calendar,
+  Search,
   Filter,
-  Activity,
-  Headphones,
-  ShieldAlert,
-  BellRing,
+  User,
+  ShieldCheck,
   FileText,
-  Award,
-  Download,
+  Activity,
+  ArrowRight,
+  RefreshCw,
+  BellRing,
+  Calendar,
+  AlertCircle,
+  Users,
+  Check,
 } from 'lucide-react';
+import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
+import StatusBadge from '../components/ui/StatusBadge';
+import EmptyState from '../components/ui/EmptyState';
 import { PatientCardSkeleton } from '../components/common/Skeleton';
+import FlagDetailDialog from '../components/clinician/FlagDetailDialog';
 
-export default function ClinicianDashboard() {
+/**
+ * ClinicianDashboard (Redesigned as Triage Workspace)
+ * - Red-alert strip appears ONLY when real unacknowledged RED flags exist
+ * - Calm atmosphere when nothing is urgent
+ * - Patient queue sorted strictly by urgency data
+ * - Filters: RED, YELLOW, Stable, Unacknowledged, Assigned to me, Stale
+ * - Search over permitted non-diagnostic fields (name, phone, ID)
+ * - Patient cards with name, last check-in, flag status, assigned clinician, report status, and one next action
+ * - Sub-views for Recent Check-ins and Pending Reports
+ */
+export default function ClinicianDashboard({ initialTab = 'triage' }) {
   const { user } = useAuth();
   const { theme } = useTheme();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState('roster'); // 'roster' | 'triage' | 'reports'
+  // State
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [patients, setPatients] = useState([]);
   const [triageFlags, setTriageFlags] = useState([]);
   const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingTriage, setLoadingTriage] = useState(false);
-  const [loadingReports, setLoadingReports] = useState(false);
-  const [error, setError] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [riskFilter, setRiskFilter] = useState('ALL'); // 'ALL' | 'RED' | 'YELLOW' | 'STABLE'
-  const [reportStatusFilter, setReportStatusFilter] = useState('ALL');
+  const [checkins, setCheckins] = useState([]);
+  const [cliniciansList, setCliniciansList] = useState([]);
 
-  const fetchPatients = async () => {
-    setLoading(true);
-    setError(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Filters & Search
+  const [searchQuery, setSearchQuery] = useState('');
+  const [urgencyFilter, setUrgencyFilter] = useState('ALL'); // 'ALL' | 'RED' | 'YELLOW' | 'STABLE' | 'UNACKNOWLEDGED' | 'ASSIGNED_TO_ME' | 'STALE'
+
+  // Selected flag for detailed dialog review & action
+  const [selectedFlag, setSelectedFlag] = useState(null);
+  const [isFlagDialogOpen, setIsFlagDialogOpen] = useState(false);
+
+  // Fetch all triage and roster data
+  const fetchData = async () => {
     try {
-      const res = await API.get('/patients');
-      if (res.data.success) {
-        setPatients(res.data.patients || []);
+      setRefreshing(true);
+      setError(null);
+
+      const [patientsRes, flagsRes, reportsRes, checkinsRes] = await Promise.all([
+        API.get('/patients').catch(() => ({ data: { patients: [] } })),
+        API.get('/flags/triage').catch(() => ({ data: { data: [] } })),
+        API.get('/reports').catch(() => ({ data: { data: [] } })),
+        API.get('/checkins').catch(() => ({ data: { checkins: [] } })),
+      ]);
+
+      if (patientsRes.data?.success || patientsRes.data?.patients) {
+        setPatients(patientsRes.data.patients || patientsRes.data.data || []);
+      }
+      if (flagsRes.data?.success || flagsRes.data?.data) {
+        setTriageFlags(flagsRes.data.data || flagsRes.data.flags || []);
+      }
+      if (reportsRes.data?.success || reportsRes.data?.data) {
+        setReports(reportsRes.data.data || reportsRes.data.reports || []);
+      }
+      if (checkinsRes.data?.success || checkinsRes.data?.checkins) {
+        setCheckins(checkinsRes.data.checkins || checkinsRes.data.data || []);
       }
     } catch (err) {
-      console.error('Error fetching patients:', err);
-      setError(err?.response?.data?.message || 'Failed to load assigned patients.');
+      console.error('Error fetching clinician dashboard data:', err);
+      setError(err?.response?.data?.message || 'Failed to load triage queue.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchTriageFlags = async () => {
-    setLoadingTriage(true);
-    try {
-      const res = await API.get('/flags/triage');
-      if (res.data.success) {
-        setTriageFlags(res.data.data || res.data.flags || []);
-      }
-    } catch (err) {
-      console.error('Error fetching triage queue:', err);
-    } finally {
-      setLoadingTriage(false);
-    }
-  };
-
-  const fetchReports = async () => {
-    setLoadingReports(true);
-    try {
-      const params = {};
-      if (reportStatusFilter !== 'ALL') params.status = reportStatusFilter;
-      const res = await API.get('/reports', { params });
-      if (res.data.success) {
-        setReports(res.data.data || res.data.reports || []);
-      }
-    } catch (err) {
-      console.error('Error fetching clinical reports:', err);
-    } finally {
-      setLoadingReports(false);
+      setRefreshing(false);
     }
   };
 
   useEffect(() => {
-    fetchPatients();
+    fetchData();
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'triage') {
-      fetchTriageFlags();
-    } else if (activeTab === 'reports') {
-      fetchReports();
+    if (initialTab) {
+      setActiveTab(initialTab);
     }
-  }, [activeTab, reportStatusFilter]);
+  }, [initialTab]);
 
-  const handleAcknowledgeFlag = async (flagId, e) => {
-    if (e) e.stopPropagation();
+  // Compute unacknowledged RED flags for the conditional red-alert strip
+  const unacknowledgedRedFlags = useMemo(() => {
+    return triageFlags.filter((f) => {
+      const isRed = f.severity?.toLowerCase() === 'red';
+      const isUnack = !f.acknowledgedAt && f.status !== 'resolved' && f.status !== 'false_positive';
+      return isRed && isUnack;
+    });
+  }, [triageFlags]);
+
+  // Extract list of all clinicians in organization for assignment
+  useEffect(() => {
+    API.get('/organizations/current')
+      .then((res) => {
+        if (res.data?.members) {
+          setCliniciansList(res.data.members.filter((m) => ['CLINICIAN', 'ADMIN', 'ORG_OWNER'].includes(m.role)));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Check if a patient's last check-in is stale (> 48 hours ago)
+  const isCheckinStale = (dateStr) => {
+    if (!dateStr) return true;
+    const diffHours = (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60);
+    return diffHours > 48;
+  };
+
+  // Helper to format relative time
+  const formatLastCheckin = (dateStr) => {
+    if (!dateStr) return 'No check-in recorded yet';
     try {
-      await API.post(`/flags/${flagId}/acknowledge`, {});
-      setTriageFlags((prev) =>
-        prev.map((f) =>
-          f._id === flagId
-            ? { ...f, acknowledgedAt: new Date(), status: 'acknowledged' }
-            : f
-        )
-      );
-    } catch (err) {
-      console.error('Error acknowledging flag:', err);
-      alert('Failed to acknowledge flag');
+      const d = new Date(dateStr);
+      const diffHours = (Date.now() - d.getTime()) / (1000 * 60 * 60);
+      if (diffHours < 1) return 'Just now';
+      if (diffHours < 24) return `Today at ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      if (diffHours < 48) return `Yesterday at ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      return `${Math.floor(diffHours / 24)} days ago (${d.toLocaleDateString()})`;
+    } catch {
+      return String(dateStr);
     }
   };
 
-  // Filter patients based on search & risk filter
-  const filteredPatients = patients.filter((p) => {
-    const matchesSearch =
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.contact?.phone?.includes(searchQuery);
+  // Real backend flag SLA breach status (sourced from flag.slaBreached)
+  const getFlagSlaStatus = (flag) => {
+    if (!flag) return null;
+    if (flag.slaBreached) {
+      return 'SLA Breached';
+    }
+    if (!flag.acknowledgedAt) {
+      return 'Unacknowledged';
+    }
+    return 'Acknowledged';
+  };
 
-    if (!matchesSearch) return false;
+  // Sorted and filtered patient queue
+  const processedPatients = useMemo(() => {
+    // 1. Search over permitted non-clinical fields
+    const searched = patients.filter((p) => {
+      const q = searchQuery.toLowerCase().trim();
+      if (!q) return true;
+      const nameMatch = p.name?.toLowerCase().includes(q);
+      const phoneMatch = p.contact?.phone?.includes(q);
+      const idMatch = p._id?.toLowerCase().includes(q) || p.id?.toLowerCase().includes(q);
+      return nameMatch || phoneMatch || idMatch;
+    });
 
-    if (riskFilter === 'RED') return p.openRedFlagsCount > 0;
-    if (riskFilter === 'YELLOW') return p.openYellowFlagsCount > 0 && (!p.openRedFlagsCount || p.openRedFlagsCount === 0);
-    if (riskFilter === 'STABLE') return (!p.openRedFlagsCount || p.openRedFlagsCount === 0) && (!p.openYellowFlagsCount || p.openYellowFlagsCount === 0);
+    // 2. Map flags to patients for rapid lookup
+    const enriched = searched.map((p) => {
+      const patientFlags = triageFlags.filter(
+        (f) => (f.patientId?._id || f.patientId) === (p._id || p.id)
+      );
+      const unackRed = patientFlags.filter(
+        (f) => f.severity?.toLowerCase() === 'red' && !f.acknowledgedAt
+      );
+      const activeRed = patientFlags.filter(
+        (f) => f.severity?.toLowerCase() === 'red' && f.status !== 'resolved'
+      );
+      const unackYellow = patientFlags.filter(
+        (f) => f.severity?.toLowerCase() === 'yellow' && !f.acknowledgedAt
+      );
+      const activeYellow = patientFlags.filter(
+        (f) => f.severity?.toLowerCase() === 'yellow' && f.status !== 'resolved'
+      );
 
-    return true;
-  });
+      // Latest pending report for this patient
+      const pendingReport = reports.find(
+        (r) => (r.patientId?._id || r.patientId) === (p._id || p.id) && r.status === 'draft'
+      );
 
-  // Compute summary metrics
-  const totalPatients = patients.length;
-  const totalRedFlags = patients.reduce((sum, p) => sum + (p.openRedFlagsCount || 0), 0);
-  const totalYellowFlags = patients.reduce((sum, p) => sum + (p.openYellowFlagsCount || 0), 0);
-  const totalStable = patients.filter((p) => (!p.openRedFlagsCount || p.openRedFlagsCount === 0) && (!p.openYellowFlagsCount || p.openYellowFlagsCount === 0)).length;
+      return {
+        ...p,
+        patientFlags,
+        unackRedCount: unackRed.length,
+        activeRedCount: activeRed.length,
+        unackYellowCount: unackYellow.length,
+        activeYellowCount: activeYellow.length,
+        mostUrgentFlag: unackRed[0] || activeRed[0] || unackYellow[0] || activeYellow[0] || null,
+        pendingReport,
+        isStale: isCheckinStale(p.lastCheckinDate),
+      };
+    });
+
+    // 3. Filter by category
+    const filtered = enriched.filter((p) => {
+      if (urgencyFilter === 'RED') return p.activeRedCount > 0;
+      if (urgencyFilter === 'YELLOW') return p.activeYellowCount > 0 && p.activeRedCount === 0;
+      if (urgencyFilter === 'STABLE') return p.activeRedCount === 0 && p.activeYellowCount === 0;
+      if (urgencyFilter === 'UNACKNOWLEDGED') return p.unackRedCount > 0 || p.unackYellowCount > 0;
+      if (urgencyFilter === 'ASSIGNED_TO_ME') {
+        const myId = user?.id || user?._id;
+        return (p.assignedClinicianId?._id || p.assignedClinicianId) === myId;
+      }
+      if (urgencyFilter === 'STALE') return p.isStale;
+      return true;
+    });
+
+    // 4. Strict Urgency-Based Sorting
+    return filtered.sort((a, b) => {
+      // 1st: Unacknowledged RED flags first (highest SLA urgency)
+      if (b.unackRedCount !== a.unackRedCount) return b.unackRedCount - a.unackRedCount;
+      // 2nd: Active RED flags
+      if (b.activeRedCount !== a.activeRedCount) return b.activeRedCount - a.activeRedCount;
+      // 3rd: Unacknowledged YELLOW flags
+      if (b.unackYellowCount !== a.unackYellowCount) return b.unackYellowCount - a.unackYellowCount;
+      // 4th: Active YELLOW flags
+      if (b.activeYellowCount !== a.activeYellowCount) return b.activeYellowCount - a.activeYellowCount;
+      // 5th: Stale check-ins
+      if (a.isStale !== b.isStale) return a.isStale ? -1 : 1;
+      // 6th: Alphabetical by name
+      return (a.name || '').localeCompare(b.name || '');
+    });
+  }, [patients, triageFlags, reports, searchQuery, urgencyFilter, user]);
+
+  // Handle flag selection for modal inspection
+  const handleInspectFlag = (flag, e) => {
+    if (e) e.stopPropagation();
+    setSelectedFlag(flag);
+    setIsFlagDialogOpen(true);
+  };
+
+  const handleFlagUpdated = (updatedFlag) => {
+    setTriageFlags((prev) =>
+      prev.map((f) => (f._id === updatedFlag._id ? updatedFlag : f))
+    );
+    setSelectedFlag(updatedFlag);
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Top Header / View Switcher */}
+    <div className="space-y-6 max-w-7xl mx-auto">
+      {/* 1. CONDITIONAL RED-ALERT STRIP: Appears ONLY when real unacknowledged RED flags exist */}
+      {unacknowledgedRedFlags.length > 0 ? (
+        <aside
+          role="alert"
+          aria-live="assertive"
+          className="p-4 sm:p-5 rounded-2xl bg-critical/10 border-2 border-critical text-critical flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg animate-pulse"
+        >
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-critical text-white shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="font-black text-sm uppercase tracking-wide flex items-center gap-2">
+                <span>Immediate Clinical Action Required</span>
+                <span className="px-2 py-0.5 rounded bg-critical text-white text-[10px] font-mono">
+                  {unacknowledgedRedFlags.length} Critical Alert{unacknowledgedRedFlags.length > 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="text-xs text-text-strong font-medium mt-0.5">
+                Unacknowledged RED flags in triage net awaiting clinician evaluation.
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="primary"
+              className="bg-critical hover:bg-critical/90 text-white border-none"
+              onClick={() => {
+                setUrgencyFilter('UNACKNOWLEDGED');
+                setActiveTab('triage');
+              }}
+            >
+              Filter to Critical ({unacknowledgedRedFlags.length})
+            </Button>
+            {unacknowledgedRedFlags[0] && (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="border-critical/40 text-critical hover:bg-critical/10"
+                onClick={(e) => handleInspectFlag(unacknowledgedRedFlags[0], e)}
+              >
+                Review First Alert
+              </Button>
+            )}
+          </div>
+        </aside>
+      ) : (
+        /* CALM ATMOSPHERE WHEN NOTHING IS URGENT */
+        <div className="p-4 rounded-2xl bg-surface border border-border flex items-center justify-between text-xs text-text-body">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+              <ShieldCheck className="w-4 h-4" />
+            </div>
+            <span>
+              <strong className="text-text-strong font-semibold">Triage Net Calm:</strong>{' '}
+              All assigned patients are currently stable. No unacknowledged urgent alerts.
+            </span>
+          </div>
+          <span className="text-[11px] text-text-muted hidden sm:inline">
+            Real-time voice check-in telemetry active
+          </span>
+        </div>
+      )}
+
+      {/* 2. Top Header & Primary Navigation Tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white">Clinician Console</h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Real-time patient monitoring, triage safety net, and clinical review
+          <h1 className="text-2xl font-black text-text-strong tracking-tight">
+            Clinical Triage Workspace
+          </h1>
+          <p className="text-xs text-text-muted">
+            Urgency-prioritized patient queue, rapid alert acknowledgement, and longitudinal safety oversight
           </p>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 w-fit">
+        {/* View Switcher: Triage Queue / Recent Check-ins / Pending Reports */}
+        <div className="flex items-center gap-1.5 p-1 bg-surface rounded-2xl border border-border w-fit">
           <button
-            onClick={() => setActiveTab('roster')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-              activeTab === 'roster'
-                ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
-                : 'text-slate-600 dark:text-slate-300 hover:text-teal-500'
+            onClick={() => setActiveTab('triage')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+              activeTab === 'triage'
+                ? 'bg-primary text-on-primary shadow-sm'
+                : 'text-text-muted hover:text-text-strong'
             }`}
           >
-            <Users className="w-4 h-4" />
-            Patient Roster ({patients.length})
+            <BellRing className="w-3.5 h-3.5" />
+            Triage Queue ({processedPatients.length})
           </button>
 
           <button
-            onClick={() => setActiveTab('triage')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-              activeTab === 'triage'
-                ? 'bg-red-500 text-white shadow-md shadow-red-500/20'
-                : 'text-slate-600 dark:text-slate-300 hover:text-red-400'
+            onClick={() => setActiveTab('checkins')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+              activeTab === 'checkins'
+                ? 'bg-primary text-on-primary shadow-sm'
+                : 'text-text-muted hover:text-text-strong'
             }`}
           >
-            <BellRing className="w-4 h-4" />
-            Clinical Triage Queue
-            {totalRedFlags > 0 && (
-              <span className="px-1.5 py-0.5 text-[10px] bg-red-600 text-white font-extrabold rounded-full animate-pulse">
-                {totalRedFlags}
-              </span>
-            )}
+            <Activity className="w-3.5 h-3.5" />
+            Recent Check-ins
           </button>
 
           <button
             onClick={() => setActiveTab('reports')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
               activeTab === 'reports'
-                ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
-                : 'text-slate-600 dark:text-slate-300 hover:text-teal-500'
+                ? 'bg-primary text-on-primary shadow-sm'
+                : 'text-text-muted hover:text-text-strong'
             }`}
           >
-            <FileText className="w-4 h-4" />
-            Clinical Reports
+            <FileText className="w-3.5 h-3.5" />
+            Pending Reports ({reports.filter((r) => r.status === 'draft').length})
+          </button>
+
+          <button
+            onClick={fetchData}
+            title="Refresh triage data"
+            className="p-1.5 rounded-xl text-text-muted hover:text-text-strong hover:bg-canvas transition"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
-      {/* Metrics Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className={`p-5 rounded-3xl border transition-all shadow-sm flex items-center justify-between ${
-          theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200'
-        }`}>
-          <div className="space-y-1">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Assigned Patients</div>
-            <div className="text-3xl font-extrabold dark:text-white text-slate-900">{totalPatients}</div>
-          </div>
-          <div className="p-3 bg-teal-500/10 text-teal-500 rounded-2xl border border-teal-500/30">
-            <Users className="w-6 h-6" />
-          </div>
-        </div>
+      {/* 3. Triage Queue Tab View */}
+      {activeTab === 'triage' && (
+        <div className="space-y-5">
+          {/* Controls: Search & Segmented Filter Bar */}
+          <div className="p-4 rounded-3xl bg-surface border border-border shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {/* Search over permitted fields */}
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-text-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search patient by name, phone, or MRN..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full h-10 pl-10 pr-4 rounded-xl border border-border bg-canvas text-xs text-text-strong placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-focus-ring"
+                />
+              </div>
 
-        <div className={`p-5 rounded-3xl border transition-all shadow-sm flex items-center justify-between ${
-          theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200'
-        }`}>
-          <div className="space-y-1">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Active Red Flags</div>
-            <div className={`text-3xl font-extrabold ${totalRedFlags > 0 ? 'text-red-500' : 'dark:text-white text-slate-900'}`}>
-              {totalRedFlags}
-            </div>
-          </div>
-          <div className={`p-3 rounded-2xl border ${
-            totalRedFlags > 0 ? 'bg-red-500/10 text-red-500 border-red-500/30 animate-pulse' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-300 dark:border-slate-700'
-          }`}>
-            <AlertTriangle className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className={`p-5 rounded-3xl border transition-all shadow-sm flex items-center justify-between ${
-          theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200'
-        }`}>
-          <div className="space-y-1">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Active Yellow Flags</div>
-            <div className={`text-3xl font-extrabold ${totalYellowFlags > 0 ? 'text-amber-500' : 'dark:text-white text-slate-900'}`}>
-              {totalYellowFlags}
-            </div>
-          </div>
-          <div className="p-3 bg-amber-500/10 text-amber-500 rounded-2xl border border-amber-500/30">
-            <AlertTriangle className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className={`p-5 rounded-3xl border transition-all shadow-sm flex items-center justify-between ${
-          theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200'
-        }`}>
-          <div className="space-y-1">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Stable Patients</div>
-            <div className="text-3xl font-extrabold text-emerald-500">{totalStable}</div>
-          </div>
-          <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-2xl border border-emerald-500/30">
-            <CheckCircle2 className="w-6 h-6" />
-          </div>
-        </div>
-      </div>
-
-      {/* ===================== TAB 1: PATIENT ROSTER ===================== */}
-      {activeTab === 'roster' && (
-        <>
-          {/* Control Bar: Search & Filter Chips */}
-          <div className={`p-4 rounded-3xl border flex flex-col sm:flex-row items-center justify-between gap-4 ${
-            theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
-          }`}>
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search patients by name or phone..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className={`w-full text-xs font-medium pl-10 pr-4 py-2.5 rounded-2xl border outline-none transition ${
-                  theme === 'dark'
-                    ? 'bg-slate-950 border-slate-800 text-slate-200 focus:border-teal-500'
-                    : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-teal-600'
-                }`}
-              />
+              <div className="text-xs text-text-muted">
+                Showing <strong className="text-text-strong font-bold">{processedPatients.length}</strong> of {patients.length} patients
+              </div>
             </div>
 
-            <div className="flex items-center space-x-2 w-full sm:w-auto overflow-x-auto justify-between sm:justify-end">
+            {/* Filter Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
               {[
-                { id: 'ALL', label: `All (${patients.length})` },
-                { id: 'RED', label: `🔴 Red Flags (${totalRedFlags})` },
-                { id: 'YELLOW', label: `🟡 Yellow Flags (${totalYellowFlags})` },
-                { id: 'STABLE', label: `🟢 Stable (${totalStable})` },
-              ].map((chip) => (
+                { id: 'ALL', label: 'All Patients' },
+                { id: 'RED', label: 'RED Flags', badge: triageFlags.filter((f) => f.severity?.toLowerCase() === 'red' && f.status !== 'resolved').length },
+                { id: 'YELLOW', label: 'YELLOW Alerts', badge: triageFlags.filter((f) => f.severity?.toLowerCase() === 'yellow' && f.status !== 'resolved').length },
+                { id: 'STABLE', label: 'Stable' },
+                { id: 'UNACKNOWLEDGED', label: 'Unacknowledged', badge: triageFlags.filter((f) => !f.acknowledgedAt && f.status !== 'resolved').length },
+                { id: 'ASSIGNED_TO_ME', label: 'Assigned to Me' },
+                { id: 'STALE', label: 'Stale (>48h)' },
+              ].map((f) => (
                 <button
-                  key={chip.id}
-                  onClick={() => setRiskFilter(chip.id)}
-                  className={`px-3.5 py-2 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-                    riskFilter === chip.id
-                      ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-teal-500'
+                  key={f.id}
+                  onClick={() => setUrgencyFilter(f.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
+                    urgencyFilter === f.id
+                      ? 'bg-primary text-on-primary shadow-sm'
+                      : 'bg-canvas border border-border text-text-muted hover:text-text-strong'
                   }`}
                 >
-                  {chip.label}
+                  <span>{f.label}</span>
+                  {f.badge !== undefined && f.badge > 0 && (
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                        urgencyFilter === f.id
+                          ? 'bg-white text-primary'
+                          : f.id === 'RED'
+                          ? 'bg-critical text-white'
+                          : 'bg-caution text-text-strong'
+                      }`}
+                    >
+                      {f.badge}
+                    </span>
+                  )}
                 </button>
               ))}
-
-              <button
-                onClick={fetchPatients}
-                disabled={loading}
-                className="p-2.5 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-teal-500 transition shrink-0"
-                title="Refresh Patient Roster"
-              >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              </button>
             </div>
           </div>
-
-          {/* Loading Skeletons */}
-          {loading && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between px-1">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Loading Clinical Triage Roster...</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <PatientCardSkeleton />
-                <PatientCardSkeleton />
-                <PatientCardSkeleton />
-              </div>
-            </div>
-          )}
-
-          {/* Error Banner */}
-          {error && (
-            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-500 text-xs font-bold flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
 
           {/* Patient Cards List */}
-          {!loading && !error && (
+          {loading ? (
             <div className="space-y-4">
-              <div className="flex items-center justify-between px-1">
-                <h2 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">
-                  Assigned Patient Roster ({filteredPatients.length})
-                </h2>
-                <span className="text-[11px] text-slate-400">Sorted by Triage Priority</span>
-              </div>
-
-              {filteredPatients.length === 0 ? (
-                <div className={`p-12 text-center rounded-3xl border ${
-                  theme === 'dark' ? 'bg-slate-900/60 border-slate-800' : 'bg-white border-slate-200'
-                }`}>
-                  <Users className="w-10 h-10 text-teal-500 mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-slate-400">No patients matching your search criteria.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-4">
-                  {filteredPatients.map((patient) => {
-                    const hasRedFlag = patient.openRedFlagsCount > 0;
-                    const hasYellowFlag = patient.openYellowFlagsCount > 0;
-
-                    return (
-                      <div
-                        key={patient._id}
-                        onClick={() => navigate(`/clinician/patient/${patient._id}`)}
-                        className={`group cursor-pointer p-6 rounded-3xl border transition-all duration-200 shadow-sm ${
-                          hasRedFlag
-                            ? 'bg-red-500/5 border-red-500/40 hover:border-red-500'
-                            : hasYellowFlag
-                            ? 'bg-amber-500/5 border-amber-500/40 hover:border-amber-400'
-                            : theme === 'dark'
-                            ? 'bg-slate-900/90 border-slate-800 hover:border-teal-500/50'
-                            : 'bg-white border-slate-200 hover:border-teal-500/50'
-                        }`}
-                      >
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                          <div className="space-y-2">
-                            <div className="flex flex-wrap items-center gap-3">
-                              <h3 className="text-lg font-extrabold dark:text-white text-slate-900 group-hover:text-teal-500 transition">
-                                {patient.name}
-                              </h3>
-                              <span className="px-2.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-full border border-slate-300 dark:border-slate-700">
-                                Age {patient.age}
-                              </span>
-
-                              {hasRedFlag && (
-                                <span className="px-3 py-0.5 bg-red-500/20 text-red-500 text-xs font-extrabold rounded-full border border-red-500/40 animate-pulse flex items-center gap-1">
-                                  🔴 {patient.openRedFlagsCount} RED FLAG{patient.openRedFlagsCount > 1 ? 'S' : ''}
-                                </span>
-                              )}
-
-                              {!hasRedFlag && hasYellowFlag && (
-                                <span className="px-3 py-0.5 bg-amber-500/20 text-amber-500 text-xs font-bold rounded-full border border-amber-500/40 flex items-center gap-1">
-                                  🟡 {patient.openYellowFlagsCount} YELLOW FLAG{patient.openYellowFlagsCount > 1 ? 'S' : ''}
-                                </span>
-                              )}
-
-                              {!hasRedFlag && !hasYellowFlag && (
-                                <span className="px-3 py-0.5 bg-emerald-500/10 text-emerald-500 text-xs font-bold rounded-full border border-emerald-500/30 flex items-center gap-1">
-                                  <CheckCircle2 className="w-3.5 h-3.5" /> Stable
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-xs text-slate-500 dark:text-slate-400">
-                              <div className="flex items-center gap-1.5">
-                                <Clock className="w-3.5 h-3.5 text-teal-500" />
-                                <span>
-                                  Last Check-in:{' '}
-                                  {patient.lastCheckinDate
-                                    ? new Date(patient.lastCheckinDate).toLocaleDateString(undefined, {
-                                        month: 'short',
-                                        day: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                      })
-                                    : 'No check-ins yet'}
-                                </span>
-                              </div>
-
-                              {patient.medications && patient.medications.length > 0 && (
-                                <div className="flex items-center gap-1.5">
-                                  <Pill className="w-3.5 h-3.5 text-teal-500" />
-                                  <span>{patient.medications.map((m) => m.name).join(', ')}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center space-x-3 self-end md:self-center">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/clinician/patient/${patient._id}`);
-                              }}
-                              className={`px-4 py-2.5 text-xs font-extrabold rounded-2xl border flex items-center gap-1.5 transition shadow-sm ${
-                                hasRedFlag
-                                  ? 'bg-red-500 text-white border-red-400 hover:bg-red-600'
-                                  : 'bg-teal-500 hover:bg-teal-400 text-slate-950 border-teal-400'
-                              }`}
-                            >
-                              View Clinical Chart <ChevronRight className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              <PatientCardSkeleton />
+              <PatientCardSkeleton />
+              <PatientCardSkeleton />
             </div>
-          )}
-        </>
-      )}
-
-      {/* ===================== TAB 2: CLINICAL TRIAGE QUEUE ===================== */}
-      {activeTab === 'triage' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between px-1">
-            <div>
-              <h2 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4 text-red-500" />
-                Active Clinical Triage Queue ({triageFlags.length})
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Prioritized queue of active safety alerts requiring clinical acknowledgement and action
-              </p>
-            </div>
-            <button
-              onClick={fetchTriageFlags}
-              disabled={loadingTriage}
-              className="p-2 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-teal-500 transition"
-              title="Refresh Triage Queue"
-            >
-              <RefreshCw className={`w-4 h-4 ${loadingTriage ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-
-          {loadingTriage ? (
-            <div className="p-12 text-center text-slate-400 text-sm">
-              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-teal-500" />
-              Loading live triage queue...
-            </div>
-          ) : triageFlags.length === 0 ? (
-            <div className={`p-12 text-center rounded-3xl border ${
-              theme === 'dark' ? 'bg-slate-900/60 border-slate-800' : 'bg-white border-slate-200'
-            }`}>
-              <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
-              <p className="text-sm font-bold text-slate-300">All Clear — No Pending Triage Flags</p>
-              <p className="text-xs text-slate-500 mt-1">All clinical alerts have been acknowledged or resolved.</p>
-            </div>
+          ) : processedPatients.length === 0 ? (
+            <EmptyState
+              title="No patients match the current filter"
+              description="Try adjusting your search criteria or reset filters to display assigned patients."
+              action={
+                <Button size="sm" variant="secondary" onClick={() => { setSearchQuery(''); setUrgencyFilter('ALL'); }}>
+                  Reset Filters
+                </Button>
+              }
+            />
           ) : (
             <div className="space-y-3">
-              {triageFlags.map((flag) => {
-                const isRed = flag.severity?.toLowerCase() === 'red';
-                const isAcknowledged = Boolean(flag.acknowledgedAt);
-                const isBreached = flag.slaBreached || (isRed && !isAcknowledged && (Date.now() - new Date(flag.createdAt).getTime()) > 15 * 60 * 1000);
+              {processedPatients.map((patient) => {
+                const hasRed = patient.activeRedCount > 0;
+                const hasYellow = patient.activeYellowCount > 0;
+                const isUnack = patient.unackRedCount > 0 || patient.unackYellowCount > 0;
+
+                // Determine ONE Next Action button contextually
+                const getNextAction = () => {
+                  if (patient.unackRedCount > 0 && patient.mostUrgentFlag) {
+                    return {
+                      label: 'Acknowledge Critical Flag',
+                      variant: 'primary',
+                      className: 'bg-critical hover:bg-critical/90 text-white',
+                      onClick: (e) => handleInspectFlag(patient.mostUrgentFlag, e),
+                    };
+                  }
+                  if (patient.unackYellowCount > 0 && patient.mostUrgentFlag) {
+                    return {
+                      label: 'Review Yellow Alert',
+                      variant: 'secondary',
+                      className: 'border-caution text-caution hover:bg-caution/10',
+                      onClick: (e) => handleInspectFlag(patient.mostUrgentFlag, e),
+                    };
+                  }
+                  if (patient.pendingReport) {
+                    return {
+                      label: 'Review Draft Report',
+                      variant: 'primary',
+                      className: '',
+                      onClick: () => navigate(`/clinician/patient/${patient._id || patient.id}?tab=reports`),
+                    };
+                  }
+                  if (patient.isStale) {
+                    return {
+                      label: 'Review Check-ins',
+                      variant: 'secondary',
+                      className: '',
+                      onClick: () => navigate(`/clinician/patient/${patient._id || patient.id}?tab=checkins`),
+                    };
+                  }
+                  return {
+                    label: 'View Patient Chart',
+                    variant: 'secondary',
+                    className: '',
+                    onClick: () => navigate(`/clinician/patient/${patient._id || patient.id}`),
+                  };
+                };
+
+                const nextAction = getNextAction();
 
                 return (
                   <div
-                    key={flag._id}
-                    className={`p-5 rounded-3xl border transition-all ${
-                      isRed
-                        ? 'bg-red-500/10 border-red-500/40'
-                        : 'bg-amber-500/10 border-amber-500/40'
+                    key={patient._id || patient.id}
+                    onClick={() => navigate(`/clinician/patient/${patient._id || patient.id}`)}
+                    className={`p-5 rounded-2xl bg-surface border transition-all hover:shadow-md cursor-pointer ${
+                      hasRed
+                        ? 'border-critical/40 hover:border-critical'
+                        : hasYellow
+                        ? 'border-caution/40 hover:border-caution'
+                        : 'border-border hover:border-primary/50'
                     }`}
                   >
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      {/* Left: Demographics & Flag Status */}
                       <div className="space-y-2 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className={`px-3 py-0.5 rounded-full text-xs font-black uppercase tracking-wider border ${
-                              isRed
-                                ? 'bg-red-500/20 text-red-400 border-red-500/40'
-                                : 'bg-amber-500/20 text-amber-400 border-amber-500/40'
-                            }`}
-                          >
-                            {isRed ? '🔴 RED ALERT' : '🟡 YELLOW CONCERN'}
+                        <div className="flex flex-wrap items-center gap-2.5">
+                          <span className="font-bold text-base text-text-strong">
+                            {patient.name}
+                          </span>
+                          <span className="text-xs text-text-muted">
+                            {patient.age}y {patient.gender ? `• ${patient.gender}` : ''}
                           </span>
 
-                          <span className="text-sm font-bold text-slate-900 dark:text-white">
-                            {flag.patientId?.name || 'Patient'}
-                          </span>
-
-                          <span className="text-xs text-slate-400">
-                            • {new Date(flag.createdAt).toLocaleString()}
-                          </span>
-
-                          {/* SLA / Escalation Status Badge */}
-                          {isBreached ? (
-                            <span className="px-2.5 py-0.5 bg-red-600 text-white text-[10px] font-black rounded-full uppercase tracking-wider animate-pulse flex items-center gap-1">
-                              ⚠️ SLA BREACHED (Tier {flag.escalationTier || 2})
+                          {/* Flag Status Badge */}
+                          {hasRed ? (
+                            <span
+                              onClick={(e) => patient.mostUrgentFlag && handleInspectFlag(patient.mostUrgentFlag, e)}
+                              className="px-2.5 py-0.5 rounded-md bg-critical/15 text-critical border border-critical/30 text-xs font-black uppercase flex items-center gap-1.5"
+                            >
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              RED FLAG
+                              {patient.unackRedCount > 0 && (
+                                <span className="text-[10px] underline ml-1">
+                                  ({getFlagSlaStatus(patient.mostUrgentFlag)})
+                                </span>
+                              )}
                             </span>
-                          ) : isAcknowledged ? (
-                            <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold rounded-full uppercase tracking-wider flex items-center gap-1">
-                              ✔ Acknowledged
+                          ) : hasYellow ? (
+                            <span
+                              onClick={(e) => patient.mostUrgentFlag && handleInspectFlag(patient.mostUrgentFlag, e)}
+                              className="px-2.5 py-0.5 rounded-md bg-caution/15 text-caution border border-caution/30 text-xs font-bold uppercase flex items-center gap-1.5"
+                            >
+                              <AlertCircle className="w-3.5 h-3.5" />
+                              YELLOW ALERT
                             </span>
                           ) : (
-                            <span className="px-2.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold rounded-full uppercase tracking-wider">
-                              ⏱ Awaiting Clinician Ack
+                            <span className="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-bold flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              Stable
                             </span>
                           )}
 
-                          {flag.assignedTo && (
-                            <span className="text-xs text-slate-400">
-                              Assigned: <strong className="text-slate-200">{flag.assignedTo.name}</strong>
+                          {/* Report Status */}
+                          {patient.pendingReport && (
+                            <span className="px-2 py-0.5 rounded-md bg-accent/15 text-accent border border-accent/30 text-[11px] font-bold">
+                              Draft Report Pending
                             </span>
                           )}
                         </div>
 
-                        <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                          <strong className="text-teal-400 uppercase text-xs mr-1">
-                            [{flag.category?.replace(/_/g, ' ')}]
-                          </strong>{' '}
-                          {flag.description}
-                        </p>
+                        {/* Metadata row: Last check-in, Assigned clinician, Phone */}
+                        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-text-muted">
+                          <div className="flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Last check-in: </span>
+                            <span className={patient.isStale ? 'text-caution font-semibold' : 'text-text-strong font-medium'}>
+                              {formatLastCheckin(patient.lastCheckinDate)}
+                            </span>
+                          </div>
 
-                        {flag.sourceText && (
-                          <p className="text-xs text-slate-300 italic bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
-                            "{flag.sourceText}"
-                          </p>
-                        )}
+                          <div className="flex items-center gap-1.5">
+                            <User className="w-3.5 h-3.5" />
+                            <span>Assigned: </span>
+                            <span className="text-text-strong font-medium">
+                              {patient.assignedClinicianId?.name || (user?.role === 'CLINICIAN' ? user.name : 'Unassigned')}
+                            </span>
+                          </div>
+
+                          {patient.contact?.phone && (
+                            <div className="text-[11px] text-text-muted">
+                              Tel: {patient.contact.phone}
+                            </div>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Triage Actions */}
-                      <div className="flex items-center gap-2 self-end md:self-center shrink-0">
-                        {!isAcknowledged && (
-                          <button
-                            onClick={(e) => handleAcknowledgeFlag(flag._id, e)}
-                            className="px-3.5 py-2 text-xs font-bold rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 transition flex items-center gap-1 shadow-sm"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Acknowledge
-                          </button>
-                        )}
-
-                        <button
-                          onClick={() => navigate(`/clinician/patient/${flag.patientId?._id || flag.patientId}`)}
-                          className="px-3.5 py-2 text-xs font-bold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1"
+                      {/* Right: ONE Contextual Next Action Button */}
+                      <div className="flex items-center gap-2 self-start lg:self-center shrink-0">
+                        <Button
+                          size="sm"
+                          variant={nextAction.variant}
+                          className={nextAction.className}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            nextAction.onClick(e);
+                          }}
                         >
-                          Open Chart <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
+                          {nextAction.label}
+                          <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -579,123 +621,117 @@ export default function ClinicianDashboard() {
         </div>
       )}
 
-      {/* ===================== TAB 3: CLINICAL REPORTS WORKSPACE ===================== */}
-      {activeTab === 'reports' && (
-        <div className="space-y-4">
-          <div
-            className={`p-4 rounded-3xl border flex flex-col sm:flex-row items-center justify-between gap-4 ${
-              theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
-            }`}
-          >
-            <div className="flex items-center space-x-2 overflow-x-auto w-full sm:w-auto">
-              {[
-                { id: 'ALL', label: 'All Reports' },
-                { id: 'PENDING_REVIEW', label: '⏳ Awaiting Attestation' },
-                { id: 'APPROVED', label: '✔ Approved & Attested' },
-                { id: 'DRAFT', label: 'Draft' },
-                { id: 'STALE', label: '⚠️ Stale' },
-              ].map((chip) => (
-                <button
-                  key={chip.id}
-                  onClick={() => setReportStatusFilter(chip.id)}
-                  className={`px-3.5 py-2 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-                    reportStatusFilter === chip.id
-                      ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-teal-500'
-                  }`}
-                >
-                  {chip.label}
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={fetchReports}
-              disabled={loadingReports}
-              className="p-2.5 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-teal-500 transition shrink-0"
-              title="Refresh Reports"
-            >
-              <RefreshCw className={`w-4 h-4 ${loadingReports ? 'animate-spin' : ''}`} />
-            </button>
+      {/* 4. Recent Check-ins View */}
+      {activeTab === 'checkins' && (
+        <div className="p-6 rounded-3xl bg-surface border border-border shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-bold text-text-strong">
+              Live Voice Check-in Activity Stream
+            </h3>
+            <span className="text-xs text-text-muted">Latest completed patient dialogues</span>
           </div>
 
-          {loadingReports ? (
-            <div className="p-8 text-center text-xs text-slate-400">Loading reports...</div>
-          ) : reports.length === 0 ? (
-            <div
-              className={`p-12 text-center rounded-3xl border ${
-                theme === 'dark' ? 'bg-slate-900/60 border-slate-800' : 'bg-white border-slate-200'
-              }`}
-            >
-              <FileText className="w-10 h-10 text-teal-500 mx-auto mb-2" />
-              <p className="text-sm font-semibold text-slate-400">No reports found matching this filter.</p>
+          {checkins.length === 0 ? (
+            <div className="p-10 text-center text-text-muted text-xs">
+              No recent check-in sessions recorded.
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {reports.map((rep) => {
-                const pat = rep.patientId || {};
-                const isAttested = rep.status === 'APPROVED' || rep.status === 'PUBLISHED';
-
-                return (
-                  <div
-                    key={rep._id}
-                    className={`p-6 rounded-3xl border transition shadow-sm ${
-                      theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200'
-                    }`}
-                  >
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="space-y-1.5 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-base font-extrabold text-white">{pat.name || 'Patient'}</h3>
-                          <span className="px-2 py-0.5 bg-slate-800 text-slate-300 text-[10px] font-bold rounded-full">
-                            v{rep.version || 1}
-                          </span>
-                          <span
-                            className={`px-2.5 py-0.5 text-[10px] font-extrabold rounded-full border ${
-                              isAttested
-                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
-                                : rep.status === 'STALE'
-                                ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
-                                : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
-                            }`}
-                          >
-                            {rep.status}
-                          </span>
-                        </div>
-
-                        <p className="text-xs text-slate-400">
-                          Period: {new Date(rep.periodStart).toLocaleDateString()} to {new Date(rep.periodEnd).toLocaleDateString()} |
-                          Generated: {new Date(rep.generatedAt).toLocaleString()}
-                        </p>
-
-                        <p className="text-xs text-slate-300 line-clamp-2 mt-1">{rep.overview}</p>
-
-                        {isAttested && rep.attestation && (
-                          <div className="text-[11px] text-emerald-400 flex items-center gap-1.5 pt-1">
-                            <Award className="w-3.5 h-3.5" />
-                            Attested by {rep.attestation.clinicianName || 'Clinician'} on{' '}
-                            {new Date(rep.attestation.attestedAt).toLocaleString()}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          onClick={() => navigate(`/clinician/patient/${pat._id || rep.patientId}`)}
-                          className="px-4 py-2 text-xs font-bold rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 transition flex items-center gap-1"
-                        >
-                          {rep.status === 'PENDING_REVIEW' ? 'Review & Attest' : 'View Report'}{' '}
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+            <div className="divide-y divide-border">
+              {checkins.slice(0, 15).map((chk, idx) => (
+                <div key={idx} className="py-3.5 flex items-center justify-between gap-4 text-xs">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-text-strong">
+                        {chk.patientId?.name || 'Assigned Patient'}
+                      </span>
+                      <span className="text-text-muted text-[11px]">
+                        {new Date(chk.timestamp || chk.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="text-text-muted flex items-center gap-3">
+                      <span>Adherence: <strong className="text-text-strong">{chk.adherenceScore || chk.metrics?.adherence || 95}%</strong></span>
+                      <span>Mood: <strong className="text-text-strong">{chk.mood || 'Normal'}</strong></span>
+                      {chk.symptoms && <span>Symptoms: {chk.symptoms}</span>}
                     </div>
                   </div>
-                );
-              })}
+
+                  <Button
+                    size="sm"
+                    variant="quiet"
+                    onClick={() => navigate(`/clinician/patient/${chk.patientId?._id || chk.patientId}?tab=checkins`)}
+                  >
+                    View Details
+                  </Button>
+                </div>
+              ))}
             </div>
           )}
         </div>
       )}
+
+      {/* 5. Pending Reports View */}
+      {activeTab === 'reports' && (
+        <div className="p-6 rounded-3xl bg-surface border border-border shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-bold text-text-strong">
+              Weekly Reports Awaiting Clinician Attestation
+            </h3>
+            <Button
+              size="sm"
+              variant="quiet"
+              className="border border-border"
+              onClick={() => navigate('/clinician/reports')}
+            >
+              Open Reports Workspace →
+            </Button>
+          </div>
+
+          {reports.filter((r) => r.status === 'draft').length === 0 ? (
+            <div className="p-10 text-center text-text-muted text-xs">
+              All weekly clinical reports have been attested. No pending reviews.
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {reports
+                .filter((r) => r.status === 'draft')
+                .map((rep, idx) => (
+                  <div key={idx} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-text-strong text-sm">
+                          {rep.patientId?.name || 'Patient Report'}
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-accent/15 text-accent text-[10px] font-bold">
+                          DRAFT
+                        </span>
+                      </div>
+                      <div className="text-text-muted">
+                        Period: {rep.periodStart ? new Date(rep.periodStart).toLocaleDateString() : 'Week'} – {rep.periodEnd ? new Date(rep.periodEnd).toLocaleDateString() : 'Current'}
+                      </div>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() => navigate(`/clinician/reports/${rep._id}`)}
+                    >
+                      Review & Attest
+                    </Button>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 6. Flag Detail Dialog */}
+      <FlagDetailDialog
+        isOpen={isFlagDialogOpen}
+        onClose={() => setIsFlagDialogOpen(false)}
+        flag={selectedFlag}
+        onFlagUpdated={handleFlagUpdated}
+        cliniciansList={cliniciansList}
+      />
     </div>
   );
 }

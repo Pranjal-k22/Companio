@@ -1,7 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { useTheme } from '../../context/ThemeContext';
 import API from '../../services/api';
+import {
+  PageHeader,
+  Button,
+  StatusBadge,
+  EmptyState,
+  Skeleton,
+  TableSkeleton,
+  Dialog,
+  Input,
+  Select,
+} from '../../components/ui';
 import {
   Users,
   ShieldCheck,
@@ -21,11 +31,13 @@ import {
   Eye,
   Mail,
   Phone,
+  Copy,
+  Lock,
+  RefreshCw,
 } from 'lucide-react';
 
 export default function PatientCaregiverAccess() {
   const { user } = useAuth();
-  const { theme } = useTheme();
 
   const [caregivers, setCaregivers] = useState([]);
   const [accessHistory, setAccessHistory] = useState([]);
@@ -42,38 +54,42 @@ export default function PatientCaregiverAccess() {
     'APPOINTMENT_READ',
     'NOTIFICATION_RECEIVE',
   ]);
+  const [expiresInDays, setExpiresInDays] = useState('365');
   const [submitting, setSubmitting] = useState(false);
   const [generatedInviteLink, setGeneratedInviteLink] = useState(null);
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
+  const [revokeDialog, setRevokeDialog] = useState({ open: false, rel: null });
 
   const patientId = user?.patientId || user?._id || user?.id;
 
   const SCOPE_DESCRIPTIONS = [
-    { key: 'WELLNESS_SUMMARY_READ', label: 'Wellness Overview', desc: 'Can see your general daily wellness status' },
-    { key: 'CHECKIN_HISTORY_READ', label: 'Check-in History', desc: 'Can see when you completed your check-ins' },
-    { key: 'APPOINTMENT_READ', label: 'Appointments', desc: 'Can see your upcoming doctor visits' },
-    { key: 'MEDICATION_SCHEDULE_READ', label: 'Medication Schedule', desc: 'Can see what medicines you take and when' },
-    { key: 'MEDICATION_ADHERENCE_READ', label: 'Medication Adherence', desc: 'Can see if you took your daily medicine' },
-    { key: 'VOICE_CHECKIN_ASSIST', label: 'Voice Check-in Help', desc: 'Can help you complete your voice check-in' },
-    { key: 'CONCERN_SUBMIT', label: 'Submit Health Notes', desc: 'Can message the doctor about concerns on your behalf' },
-    { key: 'NOTIFICATION_RECEIVE', label: 'Reminders & Notifications', desc: 'Can receive appointment and check-in reminders' },
+    { key: 'WELLNESS_SUMMARY_READ', label: 'Wellness Overview', desc: 'Can see your general daily wellness status and mood' },
+    { key: 'CHECKIN_HISTORY_READ', label: 'Check-in History', desc: 'Can see when you completed your daily voice check-ins' },
+    { key: 'APPOINTMENT_READ', label: 'Doctor Appointments', desc: 'Can see upcoming clinic and doctor visit dates' },
+    { key: 'MEDICATION_SCHEDULE_READ', label: 'Medication Schedule', desc: 'Can see your prescribed medication list and times' },
+    { key: 'MEDICATION_ADHERENCE_READ', label: 'Medication Adherence', desc: 'Can see if you recorded taking your daily medicines' },
+    { key: 'VOICE_CHECKIN_ASSIST', label: 'Voice Check-in Help', desc: 'Can join or assist during your voice check-in sessions' },
+    { key: 'CONCERN_SUBMIT', label: 'Submit Health Notes', desc: 'Can send non-emergency observations to your doctor' },
+    { key: 'NOTIFICATION_RECEIVE', label: 'Reminders & Notices', desc: 'Can receive appointment and check-in reminder alerts' },
   ];
 
   const fetchCaregiversAndHistory = async () => {
+    if (!patientId) return;
     try {
       setLoading(true);
       setError(null);
 
       const [cgRes, histRes] = await Promise.all([
-        API.get(`/patients/${patientId}/caregivers`),
-        API.get(`/patients/${patientId}/caregiver-access-events`),
+        API.get(`/patients/${patientId}/caregivers`).catch(() => null),
+        API.get(`/patients/${patientId}/caregiver-access-events`).catch(() => null),
       ]);
 
-      if (cgRes.data.success) {
+      if (cgRes?.data?.success) {
         setCaregivers(cgRes.data.data || []);
       }
-      if (histRes.data.success) {
+      if (histRes?.data?.success) {
         setAccessHistory(histRes.data.data || []);
       }
     } catch (err) {
@@ -85,9 +101,7 @@ export default function PatientCaregiverAccess() {
   };
 
   useEffect(() => {
-    if (patientId) {
-      fetchCaregiversAndHistory();
-    }
+    fetchCaregiversAndHistory();
   }, [patientId]);
 
   const toggleScope = (scopeKey) => {
@@ -109,13 +123,14 @@ export default function PatientCaregiverAccess() {
         relationshipType,
         relationshipLabel,
         initialScopes: selectedScopes,
+        expiresInDays: parseInt(expiresInDays, 10) || 365,
       });
 
-      if (res.data.success) {
+      if (res.data?.success) {
         const rawToken = res.data.data?.invitationToken;
         const link = `${window.location.origin}/login?inviteToken=${rawToken}`;
         setGeneratedInviteLink(link);
-        setSuccessMessage('Invitation created successfully! Share the link below with your family member.');
+        setSuccessMessage('Invitation created successfully! Share the token or link below with your family member.');
         fetchCaregiversAndHistory();
       }
     } catch (err) {
@@ -125,155 +140,204 @@ export default function PatientCaregiverAccess() {
     }
   };
 
-  const handleRevoke = async (relationshipId, name) => {
-    if (!window.confirm(`Are you sure you want to stop sharing your information with ${name || 'this caregiver'}?`)) {
-      return;
-    }
+  const handleExecuteRevoke = async () => {
+    const { rel } = revokeDialog;
+    if (!rel) return;
+
     try {
-      await API.post(`/caregivers/invitations/${relationshipId}/revoke`, {
+      await API.post(`/caregivers/invitations/${rel._id}/revoke`, {
         revocationReason: 'Revoked by patient from permission center',
       });
-      setSuccessMessage('Access revoked successfully.');
+      setSuccessMessage(`Access for ${rel.caregiverUserId?.name || rel.relationshipLabel || 'caregiver'} revoked successfully.`);
+      setRevokeDialog({ open: false, rel: null });
       fetchCaregiversAndHistory();
+      setTimeout(() => setSuccessMessage(null), 5000);
     } catch (err) {
       setError('Failed to revoke access. Please try again.');
     }
   };
 
-  return (
-    <div className="max-w-5xl mx-auto space-y-8 p-4 md:p-6 font-sans">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
-            <Users className="w-8 h-8 text-teal-600 dark:text-teal-400" />
-            Family & Caregiver Access
-          </h1>
-          <p className="text-slate-600 dark:text-slate-300 mt-2 text-lg">
-            Choose exactly what information your family members and helpers can view. You can change or stop access at any time.
-          </p>
-        </div>
+  const handleCopyLink = () => {
+    if (generatedInviteLink) {
+      navigator.clipboard.writeText(generatedInviteLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000);
+    }
+  };
 
-        <button
-          onClick={() => {
-            setShowInviteModal(true);
-            setGeneratedInviteLink(null);
-          }}
-          className="px-5 py-3 rounded-2xl bg-teal-600 hover:bg-teal-500 text-white font-bold flex items-center gap-2 shadow-lg shadow-teal-500/20 transition-all text-lg"
-        >
-          <UserPlus className="w-6 h-6" />
-          Invite Helper
-        </button>
-      </div>
+  return (
+    <div className="space-y-6">
+      {/* Page Header */}
+      <PageHeader
+        title="Family & Caregiver Access"
+        description="You own your health data. Choose exactly what information your family members can see, and stop sharing anytime."
+        badge={<StatusBadge variant="info">Patient Governed</StatusBadge>}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={fetchCaregiversAndHistory}
+              disabled={loading}
+              className="flex items-center gap-1.5"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setShowInviteModal(true);
+                setGeneratedInviteLink(null);
+                setInviteEmail('');
+                setInvitePhone('');
+              }}
+              className="flex items-center gap-1.5"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Invite Family Member</span>
+            </Button>
+          </div>
+        }
+      />
 
       {/* Alerts */}
       {successMessage && (
-        <div className="p-4 rounded-2xl bg-emerald-500/10 border-2 border-emerald-500 text-emerald-800 dark:text-emerald-300 flex items-center gap-3">
-          <CheckCircle2 className="w-6 h-6 shrink-0" />
-          <span className="font-medium text-lg">{successMessage}</span>
+        <div className="p-3.5 rounded-card bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-200 text-xs font-semibold flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span>{successMessage}</span>
         </div>
       )}
 
       {error && (
-        <div className="p-4 rounded-2xl bg-rose-500/10 border-2 border-rose-500 text-rose-800 dark:text-rose-300 flex items-center gap-3">
-          <AlertCircle className="w-6 h-6 shrink-0" />
-          <span className="font-medium text-lg">{error}</span>
+        <div className="p-3.5 rounded-card bg-red-500/10 border border-red-500/30 text-red-800 dark:text-red-200 text-xs font-semibold flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-xs text-text-muted hover:text-text-strong font-bold"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
-      {/* Linked Caregivers List */}
-      <div className="space-y-4">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          <ShieldCheck className="w-6 h-6 text-teal-600 dark:text-teal-400" />
-          Your Helpers & Permissions
-        </h2>
+      {/* Active Family Caregivers List */}
+      <div className="bg-surface border border-border rounded-card p-6 shadow-soft-lift space-y-4">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <h2 className="text-base font-bold text-text-strong font-display flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-primary" />
+            <span>Authorized Family Helpers & Active Permissions</span>
+          </h2>
+          <span className="text-xs text-text-muted">
+            {caregivers.filter((c) => c.status === 'ACTIVE').length} Active Proxies
+          </span>
+        </div>
 
         {loading ? (
-          <div className="p-12 text-center text-slate-500">Loading your caregivers...</div>
+          <TableSkeleton rows={3} columns={4} />
         ) : caregivers.length === 0 ? (
-          <div className="p-8 rounded-3xl border-2 border-dashed border-slate-300 dark:border-slate-800 text-center space-y-3">
-            <Users className="w-12 h-12 text-slate-400 mx-auto" />
-            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">No Caregivers Linked Yet</h3>
-            <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto">
-              You haven't shared your wellness records with any family members or caregivers. Tap "Invite Helper" to add a loved one.
-            </p>
-          </div>
+          <EmptyState
+            title="No Family Members Linked Yet"
+            description="You have not shared your wellness updates with any family members. You can invite a trusted child, spouse, or helper at any time."
+            action={
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setShowInviteModal(true)}
+              >
+                Invite First Helper
+              </Button>
+            }
+          />
         ) : (
-          <div className="grid grid-cols-1 gap-6">
+          <div className="grid grid-cols-1 gap-4">
             {caregivers.map((rel) => {
               const cgUser = rel.caregiverUserId || {};
               const grant = rel.activeGrant;
               const isPending = rel.status === 'INVITED';
               const isRevoked = rel.status === 'REVOKED';
+              const scopes = grant?.permissionScopes || [];
 
               return (
                 <div
                   key={rel._id}
-                  className={`p-6 rounded-3xl border-2 transition-all shadow-sm ${
+                  className={`p-5 rounded-card border transition-all space-y-4 ${
                     isRevoked
-                      ? 'border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 opacity-60'
+                      ? 'border-border bg-surface-sunken opacity-60'
                       : isPending
-                      ? 'border-amber-400/50 bg-amber-500/5'
-                      : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+                      ? 'border-amber-500/30 bg-amber-500/5'
+                      : 'border-border bg-surface shadow-sm'
                   }`}
                 >
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl font-bold text-slate-900 dark:text-white">
-                          {cgUser.name || rel.invitationEmail || 'Caregiver'}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-bold text-text-strong">
+                          {cgUser.name || rel.invitationEmail || 'Caregiver Helper'}
                         </span>
-                        <span className="px-3 py-1 rounded-full text-sm font-semibold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                        <StatusBadge variant="neutral" size="sm">
                           {rel.relationshipLabel || rel.relationshipType}
-                        </span>
-                        {isPending && (
-                          <span className="px-3 py-1 rounded-full text-sm font-semibold bg-amber-500/20 text-amber-700 dark:text-amber-300">
-                            Invitation Pending
-                          </span>
-                        )}
-                        {isRevoked && (
-                          <span className="px-3 py-1 rounded-full text-sm font-semibold bg-rose-500/20 text-rose-700 dark:text-rose-300">
-                            Access Revoked
-                          </span>
-                        )}
+                        </StatusBadge>
+                        <StatusBadge
+                          variant={
+                            rel.status === 'ACTIVE'
+                              ? 'success'
+                              : isPending
+                              ? 'warning'
+                              : 'danger'
+                          }
+                          size="sm"
+                        >
+                          {rel.status}
+                        </StatusBadge>
                       </div>
-                      <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">
-                        {cgUser.email || rel.invitationEmail} • Added on {new Date(rel.createdAt).toLocaleDateString()}
+                      <p className="font-mono text-xs text-text-muted">
+                        {cgUser.email || rel.invitationEmail || ''}
                       </p>
                     </div>
 
                     {!isRevoked && (
-                      <button
-                        onClick={() => handleRevoke(rel._id, cgUser.name || rel.relationshipLabel)}
-                        className="px-4 py-2.5 rounded-xl border-2 border-rose-500/30 hover:border-rose-500 text-rose-600 dark:text-rose-400 font-bold flex items-center gap-2 transition-all self-start md:self-auto"
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => setRevokeDialog({ open: true, rel })}
+                        className="self-start sm:self-auto"
                       >
-                        <Trash2 className="w-5 h-5" />
-                        Stop Sharing
-                      </button>
+                        Revoke Access
+                      </Button>
                     )}
                   </div>
 
-                  {/* Active Scopes Display */}
-                  {grant && (
-                    <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800">
-                      <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">
-                        Allowed Information
-                      </h4>
-                      <div className="flex flex-wrap gap-2">
-                        {grant.permissionScopes?.map((scope) => {
-                          const info = SCOPE_DESCRIPTIONS.find((s) => s.key === scope);
-                          return (
-                            <span
-                              key={scope}
-                              className="px-3 py-1.5 rounded-xl text-sm font-medium bg-teal-500/10 border border-teal-500/30 text-teal-800 dark:text-teal-300 flex items-center gap-1.5"
-                            >
-                              <CheckCircle2 className="w-4 h-4 text-teal-500" />
-                              {info ? info.label : scope}
-                            </span>
-                          );
-                        })}
+                  {/* Permissions Summary Chips */}
+                  {!isRevoked && scopes.length > 0 && (
+                    <div className="pt-2 border-t border-border space-y-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted block">
+                        Granted Permissions
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {scopes.map((scope) => (
+                          <span
+                            key={scope}
+                            className="px-2.5 py-1 rounded bg-surface-sunken border border-border text-xs font-medium text-text-strong"
+                          >
+                            {SCOPE_DESCRIPTIONS.find((s) => s.key === scope)?.label || scope}
+                          </span>
+                        ))}
                       </div>
                     </div>
+                  )}
+
+                  {/* Validity Info */}
+                  {!isRevoked && grant?.expiresAt && (
+                    <p className="text-[11px] text-text-muted font-mono flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-text-muted" />
+                      <span>Valid until: {new Date(grant.expiresAt).toLocaleDateString()}</span>
+                    </p>
                   )}
                 </div>
               );
@@ -282,182 +346,261 @@ export default function PatientCaregiverAccess() {
         )}
       </div>
 
-      {/* Access History Audit Log */}
-      <div className="space-y-4 pt-6 border-t border-slate-200 dark:border-slate-800">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          <History className="w-6 h-6 text-teal-600 dark:text-teal-400" />
-          Who Viewed Your Information
-        </h2>
-        <p className="text-slate-600 dark:text-slate-400">
-          A secure audit log showing every time an authorized helper checked your wellness or appointments.
-        </p>
+      {/* Access Audit Ledger */}
+      <div className="bg-surface border border-border rounded-card p-6 shadow-soft-lift space-y-4">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <div className="space-y-0.5">
+            <h3 className="text-base font-bold text-text-strong font-display flex items-center gap-2">
+              <History className="w-5 h-5 text-primary" />
+              <span>Tamper-Evident Access History</span>
+            </h3>
+            <p className="text-xs text-text-muted">
+              Immutable audit log of every time a family helper viewed your wellness check-ins or schedule.
+            </p>
+          </div>
+          <StatusBadge variant="neutral" size="sm">Audit Log</StatusBadge>
+        </div>
 
         {accessHistory.length === 0 ? (
-          <div className="p-6 rounded-2xl bg-slate-100 dark:bg-slate-900 text-slate-500 text-center">
-            No access events recorded yet.
-          </div>
+          <EmptyState
+            title="No Access Events Recorded"
+            description="When an authorized family member views your check-in or appointment updates, a timestamped record is recorded here."
+          />
         ) : (
-          <div className="divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden bg-white dark:bg-slate-900">
-            {accessHistory.slice(0, 10).map((ev) => (
-              <div key={ev._id} className="p-4 flex items-center justify-between text-sm">
-                <div>
-                  <span className="font-bold text-slate-900 dark:text-white">
-                    {ev.caregiverUserId?.name || 'Helper'}
-                  </span>{' '}
-                  <span className="text-slate-600 dark:text-slate-400">
-                    viewed your {ev.permissionScope ? ev.permissionScope.replace('_READ', '').toLowerCase() : 'record'}
-                  </span>
-                </div>
-                <span className="text-xs text-slate-500">
-                  {new Date(ev.timestamp).toLocaleString()}
-                </span>
-              </div>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-surface-sunken border-b border-border text-text-muted font-bold uppercase tracking-wider">
+                <tr>
+                  <th className="py-2.5 px-3">Date & Time</th>
+                  <th className="py-2.5 px-3">Family Helper</th>
+                  <th className="py-2.5 px-3">Information Viewed</th>
+                  <th className="py-2.5 px-3">Access Result</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {accessHistory.slice(0, 10).map((evt, idx) => (
+                  <tr key={idx} className="hover:bg-surface-sunken/40 transition-colors">
+                    <td className="py-2.5 px-3 font-mono text-text-muted">
+                      {new Date(evt.timestamp || evt.createdAt).toLocaleString()}
+                    </td>
+                    <td className="py-2.5 px-3 font-semibold text-text-strong">
+                      {evt.caregiverUserId?.name || 'Authorized Caregiver'}
+                    </td>
+                    <td className="py-2.5 px-3 text-text-body">
+                      {evt.action?.replace(/_/g, ' ') || 'VIEW RECORD'}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <StatusBadge variant={evt.outcome === 'ALLOWED' ? 'success' : 'danger'} size="sm">
+                        {evt.outcome}
+                      </StatusBadge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {/* Invite Helper Modal */}
-      {showInviteModal && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-800 rounded-3xl max-w-xl w-full p-6 md:p-8 space-y-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
-              <h3 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                <UserPlus className="w-6 h-6 text-teal-500" />
-                Invite a Family Member
-              </h3>
-              <button
-                onClick={() => setShowInviteModal(false)}
-                className="p-2 text-slate-400 hover:text-white rounded-xl"
-              >
-                ✕
-              </button>
+      {/* Invite Family Member Modal */}
+      <Dialog
+        isOpen={showInviteModal}
+        onClose={() => {
+          setShowInviteModal(false);
+          setGeneratedInviteLink(null);
+        }}
+        title="Invite Family Helper or Proxy"
+        description="Choose what information your trusted family member can view. You can change permissions or stop access anytime."
+        size="lg"
+      >
+        {generatedInviteLink ? (
+          <div className="space-y-4 pt-1">
+            <div className="p-4 rounded-card bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-200 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>Invitation Ready to Share</span>
+              </div>
+              <p className="text-xs">
+                Your family member can accept this invitation to begin receiving updates.
+              </p>
             </div>
 
-            {generatedInviteLink ? (
-              <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-emerald-500/10 border-2 border-emerald-500 text-emerald-800 dark:text-emerald-300 space-y-2">
-                  <h4 className="font-bold text-lg">Invitation Link Ready!</h4>
-                  <p className="text-sm">
-                    Copy and text or email this secure link to your family member. It can only be used once.
-                  </p>
-                  <input
-                    type="text"
-                    readOnly
-                    value={generatedInviteLink}
-                    className="w-full px-3 py-2 bg-slate-950 text-white rounded-xl text-xs font-mono select-all"
-                  />
-                </div>
+            <div className="p-3.5 rounded-card bg-surface-sunken border border-border space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-text-muted">
+                  Invitation Link
+                </span>
                 <button
-                  onClick={() => setShowInviteModal(false)}
-                  className="w-full py-3 rounded-2xl bg-teal-600 text-white font-bold"
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="text-xs text-primary hover:text-primary-hover font-semibold flex items-center gap-1 focus:outline-none"
                 >
-                  Done
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>{copied ? 'Copied!' : 'Copy Link'}</span>
                 </button>
               </div>
-            ) : (
-              <form onSubmit={handleSendInvite} className="space-y-6">
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="family.member@example.com"
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white text-lg"
-                  />
-                </div>
+              <p className="font-mono text-xs text-text-strong break-all bg-surface p-2 rounded border border-border select-all">
+                {generatedInviteLink}
+              </p>
+            </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Relationship
-                    </label>
-                    <select
-                      value={relationshipType}
-                      onChange={(e) => setRelationshipType(e.target.value)}
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white"
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => {
+                  setShowInviteModal(false);
+                  setGeneratedInviteLink(null);
+                }}
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSendInvite} className="space-y-4 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Family Member Email Address"
+                type="email"
+                placeholder="daughter@example.com"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                helperText="Invitation token will be generated for this email."
+              />
+
+              <Input
+                label="Relationship Label"
+                placeholder="e.g. Daughter, Son, Spouse"
+                value={relationshipLabel}
+                onChange={(e) => setRelationshipLabel(e.target.value)}
+                helperText="How this person is related to you."
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Select
+                label="Relationship Type"
+                value={relationshipType}
+                onChange={(e) => setRelationshipType(e.target.value)}
+                options={[
+                  { value: 'FAMILY_MEMBER', label: 'Family Member (Daughter, Son, Spouse)' },
+                  { value: 'HEALTHCARE_PROXY', label: 'Healthcare Proxy / Power of Attorney' },
+                  { value: 'LEGAL_GUARDIAN', label: 'Court-Appointed Legal Guardian' },
+                  { value: 'FRIEND_OR_NEIGHBOR', label: 'Trusted Friend or Neighbor' },
+                ]}
+              />
+
+              <Select
+                label="Permission Duration"
+                value={expiresInDays}
+                onChange={(e) => setExpiresInDays(e.target.value)}
+                options={[
+                  { value: '30', label: '30 Days (Short-term assistance)' },
+                  { value: '90', label: '90 Days (Quarterly review)' },
+                  { value: '180', label: '180 Days (Half year)' },
+                  { value: '365', label: '1 Year (Standard tier)' },
+                ]}
+              />
+            </div>
+
+            {/* Granular Scopes Selector */}
+            <div className="space-y-2 pt-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-text-strong">
+                Choose What Your Helper Can See (8 Granular Scopes)
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto p-1 border border-border rounded-card bg-surface-sunken">
+                {SCOPE_DESCRIPTIONS.map((scope) => {
+                  const isChecked = selectedScopes.includes(scope.key);
+                  return (
+                    <label
+                      key={scope.key}
+                      className={`flex items-start gap-2.5 p-2.5 rounded-input cursor-pointer hover:bg-surface transition-colors ${
+                        isChecked ? 'bg-primary-tint/30' : ''
+                      }`}
                     >
-                      <option value="ADULT_CHILD">Adult Child</option>
-                      <option value="SPOUSE">Spouse</option>
-                      <option value="SIBLING">Sibling</option>
-                      <option value="FAMILY_MEMBER">Other Family Member</option>
-                      <option value="PROFESSIONAL_CAREGIVER">Professional Caregiver</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Label / Nickname
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleScope(scope.key)}
+                        className="w-4 h-4 rounded border-border text-primary focus:ring-primary mt-0.5 shrink-0"
+                      />
+                      <div className="space-y-0.5">
+                        <span className="text-xs font-bold text-text-strong block">
+                          {scope.label}
+                        </span>
+                        <span className="text-[11px] text-text-muted block leading-tight">
+                          {scope.desc}
+                        </span>
+                      </div>
                     </label>
-                    <input
-                      type="text"
-                      value={relationshipLabel}
-                      onChange={(e) => setRelationshipLabel(e.target.value)}
-                      placeholder="e.g. Eldest Daughter"
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white"
-                    />
-                  </div>
-                </div>
+                  );
+                })}
+              </div>
+            </div>
 
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">
-                    Choose What They Can See
-                  </label>
-                  <div className="space-y-3">
-                    {SCOPE_DESCRIPTIONS.map((scope) => (
-                      <label
-                        key={scope.key}
-                        onClick={() => toggleScope(scope.key)}
-                        className={`flex items-start gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
-                          selectedScopes.includes(scope.key)
-                            ? 'border-teal-500 bg-teal-500/10'
-                            : 'border-slate-200 dark:border-slate-800 hover:border-slate-400'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedScopes.includes(scope.key)}
-                          onChange={() => {}}
-                          className="mt-1 w-5 h-5 rounded text-teal-600"
-                        />
-                        <div>
-                          <div className="font-bold text-slate-900 dark:text-white text-base">
-                            {scope.label}
-                          </div>
-                          <div className="text-slate-500 dark:text-slate-400 text-xs">
-                            {scope.desc}
-                          </div>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
+              <Button
+                type="button"
+                variant="secondary"
+                size="md"
+                onClick={() => setShowInviteModal(false)}
+                disabled={submitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="md"
+                disabled={submitting || (!inviteEmail && !invitePhone)}
+              >
+                {submitting ? 'Generating...' : 'Send Invitation'}
+              </Button>
+            </div>
+          </form>
+        )}
+      </Dialog>
 
-                <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => setShowInviteModal(false)}
-                    className="px-5 py-3 rounded-2xl text-slate-600 dark:text-slate-400 hover:text-white font-bold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-6 py-3 rounded-2xl bg-teal-600 hover:bg-teal-500 text-white font-bold shadow-lg"
-                  >
-                    {submitting ? 'Generating...' : 'Create Invitation'}
-                  </button>
-                </div>
-              </form>
-            )}
+      {/* Revoke Confirmation Dialog */}
+      <Dialog
+        isOpen={revokeDialog.open}
+        onClose={() => setRevokeDialog({ open: false, rel: null })}
+        title="Confirm Stopping Access"
+        size="md"
+      >
+        <div className="space-y-4 pt-1">
+          <p className="text-xs text-text-body">
+            Are you sure you want to stop sharing your health information with{' '}
+            <strong className="font-semibold text-text-strong">
+              {revokeDialog.rel?.caregiverUserId?.name || revokeDialog.rel?.relationshipLabel || 'this caregiver'}
+            </strong>
+            ?
+          </p>
+          <div className="p-3 rounded-card bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs">
+            Their access will be immediately terminated. They will no longer be able to view your daily wellness check-ins, medication adherence, or appointments.
+          </div>
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
+            <Button
+              type="button"
+              variant="secondary"
+              size="md"
+              onClick={() => setRevokeDialog({ open: false, rel: null })}
+            >
+              Keep Access
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              size="md"
+              onClick={handleExecuteRevoke}
+            >
+              Stop Sharing Access
+            </Button>
           </div>
         </div>
-      )}
+      </Dialog>
     </div>
   );
 }
-

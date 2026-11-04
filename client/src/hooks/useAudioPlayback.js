@@ -13,18 +13,38 @@ export function useAudioPlayback(onPlayStateChange) {
   const audioContextRef = useRef(null);
   const audioQueueRef = useRef([]);
   const activeSourceRef = useRef(null);
+  const analyserRef = useRef(null);
   const isProcessingQueueRef = useRef(false);
 
   // Initialize or resume AudioContext (unlocked by user interaction)
   const getAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      audioContextRef.current = new AudioCtx();
+      const ctx = new AudioCtx();
+      audioContextRef.current = ctx;
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 128;
+      analyser.smoothingTimeConstant = 0.5;
+      analyser.connect(ctx.destination);
+      analyserRef.current = analyser;
     }
     if (audioContextRef.current.state === 'suspended') {
       audioContextRef.current.resume();
     }
     return audioContextRef.current;
+  }, []);
+
+  // Compute real RMS playback level in [0, 1] without React re-renders
+  const getPlaybackAudioLevel = useCallback(() => {
+    if (!analyserRef.current) return 0;
+    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+    analyserRef.current.getByteFrequencyData(dataArray);
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      sum += dataArray[i];
+    }
+    const avg = sum / (dataArray.length || 1);
+    return Math.min(1, avg / 110);
   }, []);
 
   const unlockAudioContext = useCallback(() => {
@@ -73,7 +93,7 @@ export function useAudioPlayback(onPlayStateChange) {
 
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(ctx.destination);
+      source.connect(analyserRef.current || ctx.destination);
       activeSourceRef.current = source;
 
       source.onended = () => {
@@ -115,6 +135,7 @@ export function useAudioPlayback(onPlayStateChange) {
     queueChunk,
     stopPlayback,
     unlockAudioContext,
+    getPlaybackAudioLevel,
   };
 }
 

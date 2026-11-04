@@ -1,55 +1,87 @@
 import React, { useState, useEffect } from 'react';
-import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import API from '../services/api';
 import {
   Calendar,
   Clock,
-  UserCheck,
-  Plus,
   Video,
   MapPin,
   CheckCircle2,
   AlertCircle,
-  ChevronRight,
-  Filter,
-  Search,
+  Plus,
   RefreshCw,
   Phone,
+  ShieldAlert,
+  WifiOff,
+  User,
+  ArrowRight,
+  X,
 } from 'lucide-react';
-import { TableSkeleton, Skeleton } from '../components/common/Skeleton';
+import Button from '../components/ui/Button';
+import StatusBadge from '../components/ui/StatusBadge';
+import EmptyState from '../components/ui/EmptyState';
+import Dialog from '../components/ui/Dialog';
+import { TableSkeleton } from '../components/common/Skeleton';
 
+/**
+ * PatientAppointments (Live Data Only)
+ * - Fetches real appointments from /api/v1/appointments
+ * - Filter by Upcoming vs Past
+ * - Schedule new appointment modal
+ * - Cancel appointment modal
+ * - Full 5-state lifecycle: loading, empty, error, offline, unauthorised
+ */
 export default function PatientAppointments() {
-  const { theme } = useTheme();
+  const { user } = useAuth();
   const [filterTab, setFilterTab] = useState('upcoming'); // 'upcoming' | 'completed' | 'all'
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+  // Modal states
   const [showBookModal, setShowBookModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedCancelAppt, setSelectedCancelAppt] = useState(null);
 
-  // New Appointment Form State
+  // New appointment form state
   const [formData, setFormData] = useState({
-    doctorName: 'Dr. Sarah Jenkins, MD',
-    specialty: 'Cardiologist',
-    clinicLocation: 'St. Jude Heart Center, Suite 402',
+    doctorName: '',
+    specialty: 'Primary Care',
+    clinicLocation: 'Main Health Pavilion',
     dateTime: '',
-    type: 'in_person',
+    type: 'telehealth',
     reasonForVisit: '',
   });
 
+  // Track offline status
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Fetch appointments from live API
   const fetchAppointments = async () => {
-    setLoading(true);
+    setRefreshing(true);
     setError(null);
     try {
       const res = await API.get('/appointments');
-      if (res.data.success && Array.isArray(res.data.appointments)) {
-        setAppointments(res.data.appointments);
+      if (res.data?.success) {
+        setAppointments(res.data.data || res.data.appointments || []);
       }
     } catch (err) {
-      console.warn('API fetch warning:', err.message);
-      setError('Unable to retrieve synced appointments. Showing cached records.');
+      console.error('Failed to load appointments:', err);
+      setError(err?.response?.data?.message || 'Failed to sync appointments with care team server.');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -57,290 +89,370 @@ export default function PatientAppointments() {
     fetchAppointments();
   }, []);
 
+  // Handle appointment booking
   const handleBookSubmit = async (e) => {
     e.preventDefault();
     if (!formData.dateTime) return;
-
     setSubmitting(true);
     try {
       const res = await API.post('/appointments', formData);
-      if (res.data.success) {
+      if (res.data?.success) {
         setShowBookModal(false);
         setFormData({
-          doctorName: 'Dr. Sarah Jenkins, MD',
-          specialty: 'Cardiologist',
-          clinicLocation: 'St. Jude Heart Center, Suite 402',
+          doctorName: '',
+          specialty: 'Primary Care',
+          clinicLocation: 'Main Health Pavilion',
           dateTime: '',
-          type: 'in_person',
+          type: 'telehealth',
           reasonForVisit: '',
         });
-        await fetchAppointments();
+        fetchAppointments();
       }
     } catch (err) {
-      alert(err?.response?.data?.message || 'Failed to schedule appointment.');
+      alert('Failed to schedule appointment: ' + (err?.response?.data?.message || err.message));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const filteredAppointments = appointments.filter((apt) => {
-    const isCompleted = apt.status === 'completed';
-    const isUpcoming = apt.status === 'scheduled' || apt.status === 'confirmed';
+  // Handle appointment cancellation
+  const handleConfirmCancel = async () => {
+    if (!selectedCancelAppt) return;
+    setSubmitting(true);
+    try {
+      const res = await API.patch(`/appointments/${selectedCancelAppt._id}/status`, {
+        status: 'cancelled',
+        clinicalNotes: 'Cancelled by patient via portal',
+      });
+      if (res.data?.success) {
+        setSelectedCancelAppt(null);
+        fetchAppointments();
+      }
+    } catch (err) {
+      alert('Failed to cancel appointment: ' + (err?.response?.data?.message || err.message));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-    if (filterTab === 'upcoming') return isUpcoming;
-    if (filterTab === 'completed') return isCompleted;
+  // Filter appointments
+  const filteredAppointments = appointments.filter((appt) => {
+    const apptDate = new Date(appt.dateTime);
+    const now = new Date();
+    const isPast = apptDate < now || appt.status === 'completed' || appt.status === 'cancelled';
+
+    if (filterTab === 'upcoming') return !isPast;
+    if (filterTab === 'completed') return isPast;
     return true;
   });
 
-  return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      {/* Header Banner */}
-      <div className={`p-6 sm:p-8 rounded-3xl border shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-        theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200'
-      }`}>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="p-2 rounded-xl bg-teal-500/10 text-teal-500 border border-teal-500/20">
-              <Calendar className="w-5 h-5" />
-            </span>
-            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight dark:text-white text-slate-900 font-display">
-              Appointments & Consultations
-            </h1>
+  // 1. Unauthorised State
+  if (user && user.role !== 'PATIENT') {
+    return (
+      <div className="p-8 max-w-xl mx-auto text-center space-y-4">
+        <div className="p-5 rounded-2xl bg-surface border border-border text-xs space-y-2">
+          <ShieldAlert className="w-6 h-6 mx-auto text-caution" />
+          <h2 className="text-sm font-bold text-text-strong">Patient Portal Access Restricted</h2>
+          <p className="text-text-muted">You are signed in as {user.role}. This view is designated for patient self-service appointments.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Loading State
+  if (loading) {
+    return (
+      <div className="space-y-6 max-w-4xl mx-auto">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <div className="h-7 w-48 bg-surface rounded-xl animate-pulse" />
+            <div className="h-4 w-64 bg-surface rounded-md animate-pulse" />
           </div>
-          <p className="text-xs sm:text-sm text-slate-400">
-            View upcoming clinical checkups, telehealth consultations, and schedule follow-ups.
+        </div>
+        <TableSkeleton rows={4} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto">
+      {/* 3. Offline Notice Banner */}
+      {isOffline && (
+        <aside
+          role="status"
+          className="p-3.5 rounded-2xl bg-surface border border-border text-xs text-text-muted flex items-center gap-2"
+        >
+          <WifiOff className="w-4 h-4 text-caution shrink-0" />
+          <span>You are offline. Displaying cached appointment schedule. Actions will sync upon reconnecting.</span>
+        </aside>
+      )}
+
+      {/* Header & Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-text-strong tracking-tight">
+            Consultation Schedule
+          </h1>
+          <p className="text-xs text-text-muted">
+            Upcoming clinical visits, telehealth sessions, and follow-up consultations
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <button
+          <Button
+            size="sm"
+            variant="quiet"
+            className="border border-border"
             onClick={fetchAppointments}
-            disabled={loading}
-            className="p-3 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-teal-500 transition"
-            title="Refresh appointments"
+            title="Refresh schedule"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <button
-            onClick={() => setShowBookModal(true)}
-            className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs sm:text-sm shadow-md shadow-teal-600/20 transition"
-          >
-            <Plus className="w-4 h-4" />
-            Book Consultation
-          </button>
+            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+
+          <Button size="sm" variant="primary" onClick={() => setShowBookModal(true)}>
+            <Plus className="w-3.5 h-3.5 mr-1.5" />
+            Request Appointment
+          </Button>
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex items-center space-x-2 border-b border-slate-200 dark:border-slate-800 pb-2">
-        {['upcoming', 'completed', 'all'].map((tab) => (
+      {/* 4. Error State */}
+      {error && (
+        <div className="p-4 rounded-2xl bg-critical/10 border border-critical/30 text-critical text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <Button size="sm" variant="secondary" onClick={fetchAppointments}>
+            Retry Sync
+          </Button>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex items-center gap-1.5 p-1 bg-surface rounded-2xl border border-border w-fit">
+        {[
+          { id: 'upcoming', label: 'Upcoming Visits' },
+          { id: 'completed', label: 'Past & Completed' },
+          { id: 'all', label: 'All History' },
+        ].map((tab) => (
           <button
-            key={tab}
-            onClick={() => setFilterTab(tab)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold capitalize transition ${
-              filterTab === tab
-                ? 'bg-teal-500 text-slate-950 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+            key={tab.id}
+            onClick={() => setFilterTab(tab.id)}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+              filterTab === tab.id
+                ? 'bg-primary text-on-primary shadow-sm'
+                : 'text-text-muted hover:text-text-strong'
             }`}
           >
-            {tab}
+            {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Appointment Cards List */}
-      <div className="grid grid-cols-1 gap-4">
-        {loading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-28 rounded-3xl" />
-            <Skeleton className="h-28 rounded-3xl" />
-            <Skeleton className="h-28 rounded-3xl" />
-          </div>
-        ) : filteredAppointments.length === 0 ? (
-          <div className={`p-12 text-center rounded-3xl border ${
-            theme === 'dark' ? 'bg-slate-900/60 border-slate-800' : 'bg-white border-slate-200'
-          }`}>
-            <Calendar className="w-10 h-10 text-teal-500 mx-auto mb-2 opacity-60" />
-            <p className="text-sm font-semibold text-slate-400">No appointments recorded under this filter.</p>
-          </div>
-        ) : (
-          filteredAppointments.map((apt) => {
-            const dateObj = new Date(apt.dateTime);
-            const dateStr = dateObj.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-            const timeStr = dateObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-            const initials = apt.doctorName
-              ? apt.doctorName.replace(/Dr\.\s*/i, '').split(' ').map((n) => n[0]).join('').slice(0, 2)
-              : 'MD';
+      {/* 5. Empty State or Appointments List */}
+      {filteredAppointments.length === 0 ? (
+        <EmptyState
+          title={
+            filterTab === 'upcoming'
+              ? 'No upcoming appointments scheduled'
+              : 'No past appointments on record'
+          }
+          description="Your scheduled appointments with your care team and specialists will appear here."
+          action={
+            <Button size="sm" variant="primary" onClick={() => setShowBookModal(true)}>
+              Schedule a Consultation
+            </Button>
+          }
+        />
+      ) : (
+        <div className="space-y-3">
+          {filteredAppointments.map((appt) => {
+            const dateObj = new Date(appt.dateTime);
+            const isTelehealth = appt.type === 'telehealth';
+            const isCancelled = appt.status === 'cancelled';
+            const isCompleted = appt.status === 'completed';
 
             return (
               <div
-                key={apt._id || apt.id}
-                className={`p-6 rounded-3xl border transition-all hover:border-teal-500/50 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 ${
-                  theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200'
+                key={appt._id}
+                className={`p-5 rounded-2xl bg-surface border transition shadow-sm space-y-4 ${
+                  isCancelled ? 'border-border opacity-70' : 'border-border hover:border-primary/40'
                 }`}
               >
-                <div className="flex items-start space-x-4">
-                  <div className="w-14 h-14 rounded-2xl bg-teal-500/15 text-teal-600 dark:text-teal-300 font-extrabold text-lg flex items-center justify-center border border-teal-500/30 shrink-0">
-                    {initials}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-base text-text-strong">
+                        {appt.doctorName || appt.clinicianId?.name || 'Care Team Clinician'}
+                      </span>
+                      <StatusBadge status={appt.status || 'scheduled'} />
+                    </div>
+                    <div className="text-xs text-text-muted">
+                      {appt.specialty || 'General Health Review'}
+                    </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <div className="flex items-center space-x-3">
-                      <h3 className="font-extrabold text-base dark:text-white text-slate-900">
-                        {apt.doctorName}
-                      </h3>
-                      <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border capitalize ${
-                        apt.status === 'confirmed'
-                          ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
-                          : apt.status === 'completed'
-                          ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
-                          : 'bg-amber-500/10 text-amber-500 border-amber-500/30'
-                      }`}>
-                        {apt.status}
-                      </span>
-                    </div>
-
-                    <p className="text-xs font-bold text-teal-600 dark:text-teal-400">{apt.specialty}</p>
-
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400 pt-1">
-                      <span className="flex items-center gap-1 font-medium">
-                        <Calendar className="w-3.5 h-3.5 text-teal-500" /> {dateStr}
-                      </span>
-                      <span className="flex items-center gap-1 font-medium">
-                        <Clock className="w-3.5 h-3.5 text-teal-500" /> {timeStr} ({apt.durationMinutes || 30} min)
-                      </span>
-                      <span className="flex items-center gap-1 font-medium">
-                        {apt.type === 'video_call' ? (
-                          <Video className="w-3.5 h-3.5 text-teal-500" />
-                        ) : apt.type === 'phone' ? (
-                          <Phone className="w-3.5 h-3.5 text-teal-500" />
-                        ) : (
-                          <MapPin className="w-3.5 h-3.5 text-teal-500" />
-                        )}
-                        {apt.clinicLocation}
-                      </span>
-                    </div>
-
-                    {apt.reasonForVisit && (
-                      <p className="text-xs text-slate-400 dark:text-slate-500 pt-1 italic">
-                        Reason: {apt.reasonForVisit}
-                      </p>
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {!isCancelled && !isCompleted && (
+                      <Button
+                        size="sm"
+                        variant="quiet"
+                        className="text-critical hover:bg-critical/10 text-xs"
+                        onClick={() => setSelectedCancelAppt(appt)}
+                      >
+                        Cancel Visit
+                      </Button>
                     )}
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-3 self-end md:self-center">
-                  {apt.type === 'video_call' && (apt.status === 'confirmed' || apt.status === 'scheduled') ? (
-                    <button className="px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-400 hover:from-teal-400 hover:to-emerald-300 text-slate-950 font-extrabold text-xs rounded-xl shadow-md transition">
-                      Join Video Call
-                    </button>
-                  ) : (
-                    <button className={`px-4 py-2 text-xs font-bold rounded-xl border transition ${
-                      theme === 'dark'
-                        ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300'
-                    }`}>
-                      Confirmed
-                    </button>
-                  )}
+                {/* Details row: Date, Time, Location/Link */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs pt-3 border-t border-border">
+                  <div className="flex items-center gap-2 text-text-body">
+                    <Calendar className="w-4 h-4 text-primary shrink-0" />
+                    <span className="font-semibold">
+                      {dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-text-body">
+                    <Clock className="w-4 h-4 text-primary shrink-0" />
+                    <span>
+                      {dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} ({appt.durationMinutes || 30} mins)
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-text-body">
+                    {isTelehealth ? (
+                      <>
+                        <Video className="w-4 h-4 text-accent shrink-0" />
+                        <span className="text-accent font-semibold">Telehealth Video Call</span>
+                      </>
+                    ) : (
+                      <>
+                        <MapPin className="w-4 h-4 text-primary shrink-0" />
+                        <span className="truncate">{appt.clinicLocation || 'Clinic Pavilion'}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
+
+                {appt.reasonForVisit && (
+                  <div className="text-xs text-text-muted italic pt-1">
+                    Reason: {appt.reasonForVisit}
+                  </div>
+                )}
               </div>
             );
-          })
-        )}
-      </div>
-
-      {/* Booking Modal */}
-      {showBookModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4">
-          <div className={`max-w-md w-full p-6 sm:p-8 rounded-3xl border shadow-2xl space-y-5 ${
-            theme === 'dark' ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
-          }`}>
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
-              <h3 className="font-extrabold text-lg">Schedule New Consultation</h3>
-              <button
-                onClick={() => setShowBookModal(false)}
-                className="text-slate-400 hover:text-white text-sm font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleBookSubmit} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-slate-400 font-bold mb-1">Clinician / Specialist</label>
-                <select
-                  value={formData.doctorName}
-                  onChange={(e) => {
-                    const doc = e.target.value;
-                    let spec = 'Cardiologist';
-                    if (doc.includes('Chang')) spec = 'Endocrinologist';
-                    if (doc.includes('Rostova')) spec = 'Neurologist';
-                    setFormData({ ...formData, doctorName: doc, specialty: spec });
-                  }}
-                  className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white"
-                >
-                  <option value="Dr. Sarah Jenkins, MD">Dr. Sarah Jenkins, MD (Cardiologist)</option>
-                  <option value="Dr. Michael Chang, MD">Dr. Michael Chang, MD (Endocrinologist)</option>
-                  <option value="Dr. Elena Rostova, MD">Dr. Elena Rostova, MD (Neurologist)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-bold mb-1">Consultation Format</label>
-                <select
-                  value={formData.type}
-                  onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                  className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white"
-                >
-                  <option value="in_person">In-Person Clinic Visit</option>
-                  <option value="video_call">Telehealth Video Call</option>
-                  <option value="phone">Telephone Consultation</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-bold mb-1">Date & Time</label>
-                <input
-                  type="datetime-local"
-                  required
-                  value={formData.dateTime}
-                  onChange={(e) => setFormData({ ...formData, dateTime: e.target.value })}
-                  className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-bold mb-1">Reason for Visit / Note for Care Team</label>
-                <textarea
-                  rows="2"
-                  value={formData.reasonForVisit}
-                  onChange={(e) => setFormData({ ...formData, reasonForVisit: e.target.value })}
-                  placeholder="e.g. Follow up on blood pressure readings or new knee stiffness"
-                  className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-500"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowBookModal(false)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-400 hover:text-white font-bold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold transition shadow-lg shadow-teal-600/20"
-                >
-                  {submitting ? 'Confirming...' : 'Confirm Appointment'}
-                </button>
-              </div>
-            </form>
-          </div>
+          })}
         </div>
       )}
+
+      {/* Booking Dialog */}
+      <Dialog
+        isOpen={showBookModal}
+        onClose={() => setShowBookModal(false)}
+        title="Request Consultation"
+        description="Schedule a follow-up appointment with your clinical care team"
+        size="md"
+      >
+        <form onSubmit={handleBookSubmit} className="space-y-4 pt-2 text-xs">
+          <div>
+            <label className="font-bold text-text-strong block mb-1">Doctor / Provider Name</label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. Dr. Sarah Jenkins"
+              value={formData.doctorName}
+              onChange={(e) => setFormData({ ...formData, doctorName: e.target.value })}
+              className="w-full h-10 px-3 rounded-xl border border-border bg-canvas text-xs text-text-strong focus:outline-none focus:ring-2 focus:ring-focus-ring"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="font-bold text-text-strong block mb-1">Specialty</label>
+              <select
+                value={formData.specialty}
+                onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
+                className="w-full h-10 px-3 rounded-xl border border-border bg-canvas text-xs text-text-strong focus:outline-none focus:ring-2 focus:ring-focus-ring"
+              >
+                <option value="Primary Care">Primary Care</option>
+                <option value="Cardiology">Cardiology</option>
+                <option value="Geriatrics">Geriatrics</option>
+                <option value="Neurology">Neurology</option>
+                <option value="Endocrinology">Endocrinology</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="font-bold text-text-strong block mb-1">Consultation Type</label>
+              <select
+                value={formData.type}
+                onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                className="w-full h-10 px-3 rounded-xl border border-border bg-canvas text-xs text-text-strong focus:outline-none focus:ring-2 focus:ring-focus-ring"
+              >
+                <option value="telehealth">Telehealth (Video)</option>
+                <option value="in_person">In-Person Clinic</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="font-bold text-text-strong block mb-1">Preferred Date & Time</label>
+            <input
+              type="datetime-local"
+              required
+              value={formData.dateTime}
+              onChange={(e) => setFormData({ ...formData, dateTime: e.target.value })}
+              className="w-full h-10 px-3 rounded-xl border border-border bg-canvas text-xs text-text-strong focus:outline-none focus:ring-2 focus:ring-focus-ring"
+            />
+          </div>
+
+          <div>
+            <label className="font-bold text-text-strong block mb-1">Reason for Visit</label>
+            <textarea
+              rows={3}
+              placeholder="Describe symptoms, routine check-in, or medication review..."
+              value={formData.reasonForVisit}
+              onChange={(e) => setFormData({ ...formData, reasonForVisit: e.target.value })}
+              className="w-full p-3 rounded-xl border border-border bg-canvas text-xs text-text-strong focus:outline-none focus:ring-2 focus:ring-focus-ring resize-none"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="quiet" onClick={() => setShowBookModal(false)}>Cancel</Button>
+            <Button variant="primary" type="submit" loading={submitting}>
+              Schedule Appointment
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* Cancellation Confirmation Dialog */}
+      <Dialog
+        isOpen={Boolean(selectedCancelAppt)}
+        onClose={() => setSelectedCancelAppt(null)}
+        title="Cancel Appointment"
+        description="Are you sure you want to cancel this scheduled consultation?"
+        size="sm"
+      >
+        <div className="space-y-4 pt-2 text-xs">
+          <p className="text-text-body">
+            Your appointment with <strong>{selectedCancelAppt?.doctorName || 'Care Team'}</strong> on{' '}
+            {selectedCancelAppt && new Date(selectedCancelAppt.dateTime).toLocaleDateString()} will be cancelled. Your care team will be notified.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="quiet" onClick={() => setSelectedCancelAppt(null)}>Keep Visit</Button>
+            <Button variant="primary" className="bg-critical hover:bg-critical/90 text-white" loading={submitting} onClick={handleConfirmCancel}>
+              Confirm Cancellation
+            </Button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 }

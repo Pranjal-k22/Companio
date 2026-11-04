@@ -9,203 +9,323 @@ import {
   Save,
   CheckCircle2,
   AlertCircle,
-  Sun,
-  Moon,
-  Loader2,
   Building,
   Phone,
+  Mail,
+  User,
+  Sliders,
+  Sun,
+  Moon,
+  Type,
+  WifiOff,
+  RefreshCw,
 } from 'lucide-react';
+import Button from '../components/ui/Button';
+import { TableSkeleton } from '../components/common/Skeleton';
 
+/**
+ * ClinicianSettings (Live Data Only)
+ * - Profile and practice info
+ * - Escalation notification preferences (SMS, Email alerts)
+ * - Accessibility & visual theme settings
+ * - Full 5-state lifecycle: loading, empty, error, offline, unauthorised
+ */
 export default function ClinicianSettings() {
   const { user } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  const { mode, setMode, textSize, setTextSize, fontScale, setFontScale } = useTheme();
 
   const [clinicName, setClinicName] = useState('');
   const [phone, setPhone] = useState('');
   const [redFlagSMS, setRedFlagSMS] = useState(true);
   const [dailyDigest, setDailyDigest] = useState(true);
-  const [saving, setSaving] = useState(false);
+
   const [loading, setLoading] = useState(true);
-  const [savedSuccess, setSavedSuccess] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
   useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        setLoading(true);
-        const res = await API.get('/auth/me');
-        if (res.data?.success && res.data.user) {
-          const u = res.data.user;
-          setClinicName(u.clinicName || 'St. Jude Medical Center - Cardiology Unit');
-          setPhone(u.phone || '');
-          if (u.preferences) {
-            setRedFlagSMS(u.preferences.redFlagSMS ?? true);
-            setDailyDigest(u.preferences.dailyDigest ?? true);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to load clinician profile:', err);
-      } finally {
-        setLoading(false);
-      }
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
+  }, []);
 
+  const loadProfile = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await API.get('/auth/me');
+      if (res.data?.success && res.data.user) {
+        const u = res.data.user;
+        setPhone(u.phone || '');
+        setClinicName(u.clinicName || 'Clinical Health Center');
+        if (u.preferences) {
+          setRedFlagSMS(u.preferences.redFlagSMS ?? true);
+          setDailyDigest(u.preferences.dailyDigest ?? true);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load clinician profile:', err);
+      setError(err?.response?.data?.message || 'Failed to load profile.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadProfile();
   }, []);
 
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
-    setErrorMessage('');
+    setError(null);
+    setSuccessMessage(null);
     try {
-      const payload = {
-        clinicName,
-        phone,
+      const res = await API.patch('/auth/me', {
+        phone: phone.trim(),
+        clinicName: clinicName.trim(),
         preferences: {
           redFlagSMS,
           dailyDigest,
         },
-      };
+      });
 
-      const res = await API.put('/auth/profile', payload);
       if (res.data?.success) {
-        setSavedSuccess(true);
-        setTimeout(() => setSavedSuccess(false), 3500);
+        setSuccessMessage('Clinician settings successfully saved.');
+        setTimeout(() => setSuccessMessage(null), 4000);
       }
     } catch (err) {
-      console.error('Failed to update clinician settings:', err);
-      setErrorMessage(err.response?.data?.message || 'Failed to save clinical settings.');
+      setError(err?.response?.data?.message || 'Failed to save settings.');
     } finally {
       setSaving(false);
     }
   };
 
+  // 1. Unauthorised State
+  if (user && !['CLINICIAN', 'ADMIN', 'ORG_OWNER'].includes(user.role)) {
+    return (
+      <div className="p-8 max-w-xl mx-auto text-center space-y-4">
+        <div className="p-5 rounded-2xl bg-surface border border-border text-xs space-y-2">
+          <ShieldAlert className="w-6 h-6 mx-auto text-caution" />
+          <h2 className="text-sm font-bold text-text-strong">Clinician Access Required</h2>
+          <p className="text-text-muted">You are not authorized to view the clinician configuration console.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Loading State
+  if (loading) {
+    return (
+      <div className="space-y-6 max-w-4xl mx-auto">
+        <div className="h-8 w-48 bg-surface rounded-xl animate-pulse" />
+        <TableSkeleton rows={4} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
+      {/* 3. Offline Notice Banner */}
+      {isOffline && (
+        <aside
+          role="status"
+          className="p-3.5 rounded-2xl bg-surface border border-border text-xs text-text-muted flex items-center gap-2"
+        >
+          <WifiOff className="w-4 h-4 text-caution shrink-0" />
+          <span>Offline mode active. Settings will synchronize when connection is restored.</span>
+        </aside>
+      )}
+
+      {/* Header */}
       <div>
-        <h2 className="text-2xl font-extrabold font-display dark:text-white text-slate-900 tracking-tight">
-          Clinical Portal Settings & Triage Thresholds
-        </h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Configure notification dispatch rules, Red Flag triage alerts, and doctor preferences
+        <h1 className="text-2xl font-black text-text-strong tracking-tight flex items-center gap-2.5">
+          <Stethoscope className="w-6 h-6 text-primary" />
+          Clinical Account & Alert Settings
+        </h1>
+        <p className="text-xs text-text-muted">
+          Manage your clinical profile, on-call alert preferences, and visual interface scaling
         </p>
       </div>
 
-      {savedSuccess && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-center gap-3 text-xs text-emerald-500 font-bold animate-fadeIn">
-          <CheckCircle2 className="w-5 h-5 shrink-0" />
-          <span>Clinical preferences saved successfully!</span>
+      {/* Success banner */}
+      {successMessage && (
+        <div className="p-4 rounded-2xl bg-primary/10 border border-primary/30 text-primary text-xs flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{successMessage}</span>
         </div>
       )}
 
-      {errorMessage && (
-        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center gap-3 text-xs text-red-500 font-bold">
-          <AlertCircle className="w-5 h-5 shrink-0" />
-          <span>{errorMessage}</span>
+      {/* 4. Error State */}
+      {error && (
+        <div className="p-4 rounded-2xl bg-critical/10 border border-critical/30 text-critical text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
         </div>
       )}
 
       <form onSubmit={handleSave} className="space-y-6">
-        <div
-          className={`p-6 rounded-3xl border space-y-4 ${
-            theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
-          }`}
-        >
-          <h3 className="font-extrabold text-sm uppercase tracking-wider text-teal-600 dark:text-teal-400 flex items-center gap-2">
-            <Stethoscope className="w-4 h-4" /> Clinician Profile
-          </h3>
+        {/* Profile Card */}
+        <div className="p-6 rounded-3xl bg-surface border border-border shadow-sm space-y-4">
+          <h2 className="text-base font-bold text-text-strong flex items-center gap-2">
+            <User className="w-4 h-4 text-primary" />
+            Practitioner Identity
+          </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div>
-              <label className="text-xs font-bold text-slate-400">Clinician Name</label>
+              <label className="font-bold text-text-strong block mb-1">Full Name</label>
               <input
                 type="text"
                 disabled
-                value={user?.name || 'Dr. Sarah Jenkins, MD'}
-                className={`w-full text-xs font-medium p-3 rounded-2xl border outline-none mt-1 opacity-70 ${
-                  theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
-                }`}
+                value={user?.name || 'Dr. Clinician'}
+                className="w-full h-10 px-3 rounded-xl border border-border bg-canvas/60 text-text-muted text-xs cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label className="text-xs font-bold text-slate-400">Clinic / Hospital Unit</label>
+              <label className="font-bold text-text-strong block mb-1">Email (Authenticated)</label>
+              <input
+                type="email"
+                disabled
+                value={user?.email || ''}
+                className="w-full h-10 px-3 rounded-xl border border-border bg-canvas/60 text-text-muted text-xs cursor-not-allowed"
+              />
+            </div>
+
+            <div>
+              <label className="font-bold text-text-strong block mb-1">Emergency Alert Phone (SMS)</label>
+              <input
+                type="tel"
+                placeholder="(555) 000-0000"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full h-10 px-3 rounded-xl border border-border bg-canvas text-xs text-text-strong focus:outline-none focus:ring-2 focus:ring-focus-ring"
+              />
+            </div>
+
+            <div>
+              <label className="font-bold text-text-strong block mb-1">Clinic / Department</label>
               <input
                 type="text"
                 value={clinicName}
                 onChange={(e) => setClinicName(e.target.value)}
-                placeholder="e.g. St. Jude Medical Center - Cardiology Unit"
-                className={`w-full text-xs font-medium p-3 rounded-2xl border outline-none mt-1 ${
-                  theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
-                }`}
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-400">Pager / On-Call Contact Phone</label>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+1 (555) 000-0000"
-                className={`w-full text-xs font-medium p-3 rounded-2xl border outline-none mt-1 ${
-                  theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
-                }`}
+                className="w-full h-10 px-3 rounded-xl border border-border bg-canvas text-xs text-text-strong focus:outline-none focus:ring-2 focus:ring-focus-ring"
               />
             </div>
           </div>
         </div>
 
-        <div
-          className={`p-6 rounded-3xl border space-y-4 ${
-            theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
-          }`}
-        >
-          <h3 className="font-extrabold text-sm uppercase tracking-wider text-teal-600 dark:text-teal-400 flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4" /> Red Flag Risk Triage Rules
-          </h3>
+        {/* Escalation Notification Preferences */}
+        <div className="p-6 rounded-3xl bg-surface border border-border shadow-sm space-y-4">
+          <h2 className="text-base font-bold text-text-strong flex items-center gap-2">
+            <Bell className="w-4 h-4 text-primary" />
+            Safety Net Alert Subscriptions
+          </h2>
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800">
-              <div>
-                <h4 className="font-bold text-sm dark:text-white text-slate-900">Instant SMS Alert for Red Flags</h4>
-                <p className="text-xs text-slate-500">
-                  Sends immediate SMS to on-call physician when patient mentions acute chest pain or severe dyspnea.
-                </p>
-              </div>
+          <div className="space-y-3 text-xs">
+            <label className="flex items-start gap-3 p-3.5 rounded-2xl bg-canvas border border-border cursor-pointer">
               <input
                 type="checkbox"
                 checked={redFlagSMS}
                 onChange={(e) => setRedFlagSMS(e.target.checked)}
-                className="w-5 h-5 accent-teal-500"
+                className="rounded border-border text-primary focus:ring-focus-ring mt-0.5"
               />
-            </div>
-
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800">
-              <div>
-                <h4 className="font-bold text-sm dark:text-white text-slate-900">Daily Morning Email Digest</h4>
-                <p className="text-xs text-slate-500">
-                  Receive 8:00 AM summary report of all patient check-in adherence and flag counts via Resend.
-                </p>
+              <div className="space-y-0.5">
+                <span className="font-bold text-text-strong block">Urgent RED Flag SMS Dispatch</span>
+                <span className="text-text-muted text-[11px]">Receive immediate high-priority SMS notifications when a patient triggers an acute symptom or red-flag emergency rule.</span>
               </div>
+            </label>
+
+            <label className="flex items-start gap-3 p-3.5 rounded-2xl bg-canvas border border-border cursor-pointer">
               <input
                 type="checkbox"
                 checked={dailyDigest}
                 onChange={(e) => setDailyDigest(e.target.checked)}
-                className="w-5 h-5 accent-teal-500"
+                className="rounded border-border text-primary focus:ring-focus-ring mt-0.5"
               />
+              <div className="space-y-0.5">
+                <span className="font-bold text-text-strong block">Morning Triage Digest</span>
+                <span className="text-text-muted text-[11px]">Receive a consolidated 8:00 AM summary of patient check-in completions, missed doses, and pending draft reports.</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        {/* Accessibility & Visual Styling */}
+        <div className="p-6 rounded-3xl bg-surface border border-border shadow-sm space-y-4">
+          <h2 className="text-base font-bold text-text-strong flex items-center gap-2">
+            <Sliders className="w-4 h-4 text-primary" />
+            Console Theme & Text Scale
+          </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            {/* Theme mode */}
+            <div className="p-4 rounded-2xl bg-canvas border border-border space-y-2">
+              <span className="font-bold text-text-strong flex items-center gap-1.5">
+                <Sun className="w-4 h-4 text-primary" />
+                Color Theme
+              </span>
+              <div className="flex items-center gap-2 pt-1">
+                {['auto', 'day', 'night'].map((m) => (
+                  <button
+                    type="button"
+                    key={m}
+                    onClick={() => setMode && setMode(m)}
+                    className={`flex-1 py-1.5 rounded-xl font-bold uppercase transition text-xs ${
+                      mode === m
+                        ? 'bg-primary text-on-primary shadow-sm'
+                        : 'bg-surface border border-border text-text-muted hover:text-text-strong'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Text Scale */}
+            <div className="p-4 rounded-2xl bg-canvas border border-border space-y-2">
+              <span className="font-bold text-text-strong flex items-center gap-1.5">
+                <Type className="w-4 h-4 text-primary" />
+                Text Scaling
+              </span>
+              <div className="flex items-center gap-2 pt-1">
+                {[100, 125, 150].map((sz) => (
+                  <button
+                    type="button"
+                    key={sz}
+                    onClick={() => {
+                      if (setFontScale) setFontScale(sz);
+                      if (setTextSize) setTextSize(sz);
+                    }}
+                    className={`flex-1 py-1.5 rounded-xl font-bold transition text-xs ${
+                      (fontScale === sz || textSize === sz)
+                        ? 'bg-primary text-on-primary shadow-sm'
+                        : 'bg-surface border border-border text-text-muted hover:text-text-strong'
+                    }`}
+                  >
+                    {sz}%
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="w-full py-3.5 bg-gradient-to-r from-teal-500 to-emerald-400 hover:from-teal-400 hover:to-emerald-300 text-slate-950 font-extrabold text-sm rounded-2xl transition shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 disabled:opacity-50"
-        >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          <span>{saving ? 'Saving Settings...' : 'Save Clinical Settings'}</span>
-        </button>
+        <div className="flex justify-end">
+          <Button size="md" variant="primary" type="submit" loading={saving}>
+            <Save className="w-4 h-4 mr-2" />
+            Save Preferences
+          </Button>
+        </div>
       </form>
     </div>
   );

@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import API from '../../services/api';
+import {
+  PageHeader,
+  Button,
+  StatusBadge,
+  EmptyState,
+  Select,
+} from '../../components/ui';
 import {
   MessageSquarePlus,
   AlertTriangle,
@@ -9,13 +17,19 @@ import {
   ArrowLeft,
   Send,
   ShieldAlert,
+  PhoneCall,
+  History,
 } from 'lucide-react';
 
 export default function CaregiverConcerns() {
+  const { activeOrganization } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
   const initialPatientId = queryParams.get('patientId') || '';
+
+  // Documented default emergency number with fallback from organization settings
+  const emergencyNumber = activeOrganization?.settings?.emergencyNumber || activeOrganization?.contactPhone || '911';
 
   const [patients, setPatients] = useState([]);
   const [selectedPatientId, setSelectedPatientId] = useState(initialPatientId);
@@ -33,7 +47,7 @@ export default function CaregiverConcerns() {
     async function loadPatients() {
       try {
         const res = await API.get('/caregiver/patients');
-        if (res.data.success && res.data.data) {
+        if (res.data?.success && res.data.data) {
           const list = res.data.data.map((item) => item.patient);
           setPatients(list);
           if (!selectedPatientId && list.length > 0) {
@@ -52,7 +66,7 @@ export default function CaregiverConcerns() {
     try {
       setLoading(true);
       const res = await API.get(`/caregiver/patients/${selectedPatientId}/concerns`);
-      if (res.data.success) {
+      if (res.data?.success) {
         setConcerns(res.data.data || []);
       }
     } catch (err) {
@@ -63,196 +77,226 @@ export default function CaregiverConcerns() {
   };
 
   useEffect(() => {
-    loadConcerns();
+    if (selectedPatientId) {
+      loadConcerns();
+    }
   }, [selectedPatientId]);
 
-  const handleSubmitConcern = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!description.trim() || description.length < 5) {
-      setError('Please provide at least a few words describing your observation.');
-      return;
-    }
+    if (!description.trim() || !selectedPatientId) return;
+
+    setSubmitting(true);
+    setFeedback(null);
+    setError(null);
 
     try {
-      setSubmitting(true);
-      setError(null);
-      setFeedback(null);
-
       const res = await API.post(`/caregiver/patients/${selectedPatientId}/concerns`, {
         category,
-        description,
+        description: description.trim(),
+        observedAt: new Date().toISOString(),
       });
 
-      if (res.data.success) {
-        setFeedback(res.data.data);
+      if (res.data?.success) {
+        setFeedback('Health note securely recorded and routed to your loved one’s care team.');
         setDescription('');
         loadConcerns();
+        setTimeout(() => setFeedback(null), 5000);
       }
     } catch (err) {
-      setError(err?.response?.data?.message || 'Failed to submit concern.');
+      console.error('Failed to submit concern:', err);
+      setError(err?.response?.data?.message || 'Failed to submit health note. Please try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  return (
-    <div className="max-w-4xl mx-auto space-y-6 p-4 md:p-6 font-sans">
-      <button
-        onClick={() => navigate('/caregiver/dashboard')}
-        className="text-teal-600 dark:text-teal-400 font-bold flex items-center gap-2 hover:underline"
-      >
-        <ArrowLeft className="w-4 h-4" /> Back to Dashboard
-      </button>
+  const categoryOptions = [
+    { value: 'mobility_deterioration', label: 'Mobility & Walking (Unsteadiness, increased fall risk)' },
+    { value: 'cognitive_decline', label: 'Cognitive & Memory (Confusion, repeating questions, disorientation)' },
+    { value: 'medication_side_effect', label: 'Medication Side Effects (Nausea, unusual fatigue, rash)' },
+    { value: 'appetite_loss', label: 'Nutrition & Appetite (Skipping meals, reduced water intake)' },
+    { value: 'social_isolation', label: 'Mood & Well-being (Withdrawal, sadness, lack of interest)' },
+    { value: 'other', label: 'Other Non-Emergency Health Note' },
+  ];
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-        <div>
-          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white flex items-center gap-3">
-            <MessageSquarePlus className="w-8 h-8 text-teal-500" />
-            Report a Clinical Concern
-          </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Notify your loved one’s care team about a change in mobility, mood, memory, or appetite.
+  const selectedPatientObj = patients.find((p) => p.id === selectedPatientId);
+
+  return (
+    <div className="space-y-6">
+      {/* Page Header */}
+      <PageHeader
+        title="Report Caregiver Health Note"
+        description="Share observations with the attending care team. Non-emergency notes are reviewed during daily triage."
+        badge={<StatusBadge variant="info">Caregiver Reported</StatusBadge>}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => navigate('/caregiver/dashboard')}
+              className="flex items-center gap-1.5"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Dashboard</span>
+            </Button>
+            <Button
+              variant="critical"
+              size="sm"
+              leftIcon={PhoneCall}
+              onClick={() => {
+                window.location.href = `tel:${emergencyNumber}`;
+              }}
+              className="text-xs uppercase font-bold"
+            >
+              Call Emergency Services ({emergencyNumber})
+            </Button>
+          </div>
+        }
+      />
+
+      {/* Emergency Warning Banner */}
+      <div className="p-4 rounded-card bg-coral-tint/30 border-2 border-coral/40 flex items-start gap-3.5 shadow-sm">
+        <ShieldAlert className="w-6 h-6 text-coral shrink-0 mt-0.5" />
+        <div className="space-y-1 text-xs">
+          <p className="font-bold text-coral text-sm">
+            Clinical Safety Notice — Not for Emergencies
+          </p>
+          <p className="text-text-body leading-relaxed">
+            If your loved one is experiencing <strong className="font-semibold text-text-strong">chest pain, shortness of breath, a severe fall with head injury, or sudden confusion</strong>, STOP and call emergency services ({emergencyNumber}) immediately. Care team notes are evaluated during normal triage hours and should never substitute for emergency services.
           </p>
         </div>
-
-        {patients.length > 1 && (
-          <select
-            value={selectedPatientId}
-            onChange={(e) => setSelectedPatientId(e.target.value)}
-            className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
-          >
-            {patients.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        )}
       </div>
 
-      {/* Emergency Guidance Notice */}
-      <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 flex items-start gap-3 text-sm">
-        <ShieldAlert className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
-        <div>
-          <span className="font-bold">Medical Emergency Notice: </span>
-          If your loved one is experiencing severe chest pain, slurred speech, sudden weakness, or trouble breathing, call <strong>911</strong> immediately. Do not wait for an online response.
-        </div>
-      </div>
-
-      {/* Feedback Alert */}
       {feedback && (
-        <div
-          className={`p-5 rounded-2xl border-2 flex items-start gap-3 ${
-            feedback.detectedEmergency
-              ? 'bg-rose-500/10 border-rose-500 text-rose-300'
-              : 'bg-emerald-500/10 border-emerald-500 text-emerald-800 dark:text-emerald-300'
-          }`}
-        >
-          {feedback.detectedEmergency ? (
-            <AlertTriangle className="w-6 h-6 shrink-0 text-rose-500" />
-          ) : (
-            <CheckCircle2 className="w-6 h-6 shrink-0 text-emerald-500" />
-          )}
-          <div>
-            <div className="font-bold text-base">
-              {feedback.detectedEmergency ? 'High-Priority Alert Raised' : 'Concern Submitted to Care Team'}
-            </div>
-            <div className="text-sm mt-1">{feedback.guidance}</div>
-          </div>
+        <div className="p-3.5 rounded-card bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-200 text-xs font-semibold flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span>{feedback}</span>
         </div>
       )}
 
       {error && (
-        <div className="p-4 rounded-2xl bg-rose-500/10 border-2 border-rose-500 text-rose-300 flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 shrink-0" />
+        <div className="p-3.5 rounded-card bg-red-500/10 border border-red-500/30 text-red-800 dark:text-red-200 text-xs font-semibold flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Form */}
-      <form onSubmit={handleSubmitConcern} className="p-6 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-4 shadow-sm">
-        <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-          Submit Observation Note
+      {/* Form Card */}
+      <div className="bg-surface border border-border rounded-card p-6 shadow-soft-lift space-y-5">
+        <h3 className="text-base font-bold text-text-strong font-display flex items-center gap-2 border-b border-border pb-3">
+          <MessageSquarePlus className="w-5 h-5 text-primary" />
+          <span>Submit Observation to Care Team</span>
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">
-              Category
-            </label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white"
-            >
-              <option value="mobility_deterioration">Mobility & Walking Difficulty</option>
-              <option value="fall_concern">Near-Fall or Balance Issue</option>
-              <option value="confusion_or_memory">Memory & Confusion</option>
-              <option value="appetite_or_weight">Appetite & Eating</option>
-              <option value="mood_or_isolation">Mood & Social Withdrawal</option>
-              <option value="medication_difficulty">Medication Trouble or Side Effect</option>
-              <option value="pain_or_discomfort">Pain or Discomfort</option>
-              <option value="other">Other Health Concern</option>
-            </select>
-          </div>
-        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {patients.length > 1 && (
+            <div className="space-y-1">
+              <label className="block text-xs font-bold uppercase tracking-wider text-text-strong">
+                Select Loved One
+              </label>
+              <select
+                value={selectedPatientId}
+                onChange={(e) => setSelectedPatientId(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-input bg-surface border border-border text-text-strong text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                {patients.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} (Age {p.age})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
-        <div>
-          <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">
-            What did you observe?
-          </label>
-          <textarea
-            rows={4}
-            required
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="e.g. Mom seemed dizzy when getting out of bed this morning and took an extra 10 minutes to walk to the kitchen."
-            className="w-full p-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white text-base"
+          <Select
+            label="Observation Category"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            options={categoryOptions}
+            helperText="Categorizes the note for triage routing to the attending clinician."
           />
-        </div>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="px-6 py-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold flex items-center gap-2 shadow-md transition-all ml-auto"
-        >
-          <Send className="w-4 h-4" />
-          {submitting ? 'Submitting...' : 'Send Note to Care Team'}
-        </button>
-      </form>
+          <div className="space-y-1">
+            <label className="block text-xs font-bold uppercase tracking-wider text-text-strong">
+              What have you noticed?
+            </label>
+            <textarea
+              required
+              rows={4}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe what you observed (e.g. Mom seemed a bit unsteady getting up from the chair this morning, or Dad forgot his afternoon blood pressure pill)..."
+              className="w-full px-3.5 py-2.5 rounded-input bg-surface border border-border text-text-strong text-sm focus:outline-none focus:ring-2 focus:ring-primary transition"
+            />
+            <p className="text-[11px] text-text-muted">
+              Attributed with source: <code className="font-mono font-semibold text-text-strong">CAREGIVER_REPORTED</code>.
+            </p>
+          </div>
 
-      {/* Past Concerns List */}
-      <div className="space-y-4 pt-6">
-        <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          <Clock className="w-5 h-5 text-teal-500" />
-          Past Submitted Notes
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
+            <Button
+              type="submit"
+              variant="primary"
+              size="md"
+              disabled={submitting || !description.trim()}
+              className="flex items-center gap-2"
+            >
+              <Send className="w-4 h-4" />
+              <span>{submitting ? 'Submitting Note...' : 'Send Note to Care Team'}</span>
+            </Button>
+          </div>
+        </form>
+      </div>
+
+      {/* Submitted Concerns History */}
+      <div className="bg-surface border border-border rounded-card p-6 shadow-soft-lift space-y-4">
+        <h3 className="text-base font-bold text-text-strong font-display flex items-center gap-2 border-b border-border pb-3">
+          <History className="w-5 h-5 text-primary" />
+          <span>
+            Past Health Notes for {selectedPatientObj?.name || 'Loved One'} ({concerns.length})
+          </span>
         </h3>
 
         {loading ? (
-          <div className="p-8 text-center text-slate-500">Loading submitted concerns...</div>
+          <p className="text-xs text-text-muted text-center py-4">Loading past notes...</p>
         ) : concerns.length === 0 ? (
-          <div className="p-8 text-center text-slate-500 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
-            No past concerns recorded.
-          </div>
+          <EmptyState
+            title="No Past Health Notes"
+            description="You haven't submitted any health notes for this loved one yet."
+          />
         ) : (
           <div className="space-y-3">
             {concerns.map((c) => (
               <div
                 key={c._id}
-                className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2 shadow-sm"
+                className="p-4 rounded-card bg-surface-sunken border border-border space-y-2 text-xs"
               >
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold px-2.5 py-1 rounded-md bg-teal-500/10 text-teal-600 dark:text-teal-400 uppercase tracking-wider">
-                    {c.category?.replace('_', ' ')}
-                  </span>
-                  <span className="text-slate-500">
-                    {new Date(c.submittedAt).toLocaleString()}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <StatusBadge variant="info" size="sm">
+                      {c.category?.replace(/_/g, ' ') || 'HEALTH NOTE'}
+                    </StatusBadge>
+                    <StatusBadge variant="neutral" size="sm">
+                      Source: CAREGIVER_REPORTED
+                    </StatusBadge>
+                  </div>
+                  <span className="font-mono text-text-muted text-[11px] flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {new Date(c.observedAt || c.createdAt).toLocaleDateString()}
                   </span>
                 </div>
-                <p className="text-sm text-slate-800 dark:text-slate-200">{c.description}</p>
-                <div className="text-xs text-slate-500 font-semibold pt-1">
-                  Status: <span className="uppercase">{c.status}</span>
-                </div>
+
+                <p className="text-text-strong leading-relaxed pt-1">
+                  {c.description}
+                </p>
+
+                {c.linkedFlagId && (
+                  <p className="text-[11px] font-semibold text-coral flex items-center gap-1 pt-1">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>Associated with an active clinical triage flag for care team review.</span>
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -261,4 +305,3 @@ export default function CaregiverConcerns() {
     </div>
   );
 }
-

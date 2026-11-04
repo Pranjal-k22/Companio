@@ -1,42 +1,47 @@
-import React, { useState } from 'react';
-import Sidebar from './Sidebar';
-import Header from './Header';
-import { useTheme } from '../../context/ThemeContext';
+import React from 'react';
+import { useAuth } from '../../context/AuthContext';
+import PatientLayout from './PatientLayout';
+import ClinicianLayout from './ClinicianLayout';
+import OrganizationAdminLayout from './OrganizationAdminLayout';
+import CaregiverLayout from './CaregiverLayout';
 
-export default function AppLayout({ children, pageTitle }) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const { theme } = useTheme();
+/**
+ * Companio AppLayout
+ * Role-aware layout delegator. Routes each user persona to its dedicated, accessible layout.
+ */
+export default function AppLayout({ children, pageTitle, layoutType }) {
+  const { user } = useAuth();
 
-  return (
-    <div className={`min-h-screen font-sans transition-colors duration-200 ${
-      theme === 'dark' ? 'bg-[#090d16] text-slate-100' : 'bg-[#f4f6fb] text-slate-800'
-    }`}>
-      {/* Sidebar */}
-      <Sidebar
-        collapsed={collapsed}
-        setCollapsed={setCollapsed}
-        mobileOpen={mobileOpen}
-        setMobileOpen={setMobileOpen}
-      />
+  // Explicit layout override if specified
+  if (layoutType === 'patient') {
+    return <PatientLayout pageTitle={pageTitle}>{children}</PatientLayout>;
+  }
+  if (layoutType === 'clinician') {
+    return <ClinicianLayout pageTitle={pageTitle}>{children}</ClinicianLayout>;
+  }
+  if (layoutType === 'admin') {
+    return <OrganizationAdminLayout pageTitle={pageTitle}>{children}</OrganizationAdminLayout>;
+  }
+  if (layoutType === 'caregiver') {
+    return <CaregiverLayout pageTitle={pageTitle}>{children}</CaregiverLayout>;
+  }
 
-      {/* Main Content Area */}
-      <div className={`flex flex-col min-h-screen transition-all duration-300 ${
-        collapsed ? 'lg:ml-20' : 'lg:ml-64'
-      }`}>
-        {/* Top Header */}
-        <Header
-          collapsed={collapsed}
-          mobileOpen={mobileOpen}
-          setMobileOpen={setMobileOpen}
-          pageTitle={pageTitle}
-        />
+  // Automatic role-based delegation
+  if (user?.role === 'PATIENT') {
+    return <PatientLayout pageTitle={pageTitle}>{children}</PatientLayout>;
+  }
 
-        {/* Page Content Viewport */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
-          {children}
-        </main>
-      </div>
-    </div>
-  );
+  if (user?.role === 'ADMIN') {
+    // Admin defaults to ClinicianLayout for clinical views or OrganizationAdminLayout for admin views
+    return <ClinicianLayout pageTitle={pageTitle}>{children}</ClinicianLayout>;
+  }
+
+  if (user?.role === 'CAREGIVER') {
+    return <CaregiverLayout pageTitle={pageTitle}>{children}</CaregiverLayout>;
+  }
+
+  // Default to ClinicianLayout for CLINICIAN and other clinical staff
+  return <ClinicianLayout pageTitle={pageTitle}>{children}</ClinicianLayout>;
 }
+
+export { PatientLayout, ClinicianLayout, OrganizationAdminLayout, CaregiverLayout };

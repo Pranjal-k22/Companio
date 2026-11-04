@@ -1,44 +1,78 @@
 import React, { useState, useEffect } from 'react';
-import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import API from '../services/api';
 import {
-  FileText,
-  Download,
-  CheckCircle2,
-  AlertTriangle,
+  FlaskConical,
   Calendar,
   Activity,
   User,
   ExternalLink,
   RefreshCw,
-  FlaskConical,
+  AlertCircle,
+  WifiOff,
+  ShieldAlert,
+  Info,
+  CheckCircle2,
+  FileText,
 } from 'lucide-react';
-import { TableSkeleton, Skeleton } from '../components/common/Skeleton';
+import Button from '../components/ui/Button';
+import EmptyState from '../components/ui/EmptyState';
+import { TableSkeleton } from '../components/common/Skeleton';
 
+/**
+ * PatientPathology (Live Data Only)
+ * - Fetches real laboratory results from /api/v1/lab-results/patient/:patientId
+ * - Neutral clinical styling (calm Bloom tokens)
+ * - Source reference range on every marker with LOINC codes
+ * - Mandatory disclaimer: "Your clinician will explain your results"
+ * - Full 5-state lifecycle: loading, empty, error, offline, unauthorised
+ */
 export default function PatientPathology() {
-  const { theme } = useTheme();
   const { user } = useAuth();
   const [labs, setLabs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
+  // Track offline status
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Fetch labs from live API
   const fetchLabs = async () => {
-    setLoading(true);
+    setRefreshing(true);
     setError(null);
     try {
-      const patientId = user?.patientId || user?.userId;
+      // Find patient profile ID
+      let patientId = user?.patientId || user?.patientProfile?._id;
+      if (!patientId) {
+        const profileRes = await API.get('/auth/me');
+        patientId = profileRes.data?.user?.patientId || profileRes.data?.user?.patientProfile?._id;
+      }
+
       if (patientId) {
         const res = await API.get(`/lab-results/patient/${patientId}`);
-        if (res.data.success && Array.isArray(res.data.labs)) {
-          setLabs(res.data.labs);
+        if (res.data?.success) {
+          setLabs(res.data.data || res.data.labs || []);
         }
+      } else {
+        setLabs([]);
       }
     } catch (err) {
-      console.warn('Pathology fetch warning:', err.message);
-      setError('Unable to reach clinical pathology server. Showing recent lab history.');
+      console.error('Failed to load lab results:', err);
+      setError(err?.response?.data?.message || 'Unable to connect to clinical laboratory service.');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -46,167 +80,188 @@ export default function PatientPathology() {
     fetchLabs();
   }, [user]);
 
-  return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      {/* Page Header */}
-      <div className={`p-6 sm:p-8 rounded-3xl border shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-        theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200'
-      }`}>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="p-2 rounded-xl bg-teal-500/10 text-teal-500 border border-teal-500/20">
-              <FlaskConical className="w-5 h-5" />
-            </span>
-            <h1 className="text-xl sm:text-2xl font-extrabold font-display dark:text-white text-slate-900 tracking-tight">
-              Pathology & Diagnostic Laboratory Reports
-            </h1>
+  // 1. Unauthorised State
+  if (user && user.role !== 'PATIENT') {
+    return (
+      <div className="p-8 max-w-xl mx-auto text-center space-y-4">
+        <div className="p-5 rounded-2xl bg-surface border border-border text-xs space-y-2">
+          <ShieldAlert className="w-6 h-6 mx-auto text-caution" />
+          <h2 className="text-sm font-bold text-text-strong">Patient Portal Access Restricted</h2>
+          <p className="text-text-muted">You are signed in as {user.role}. This view is designated for patient self-service pathology records.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Loading State
+  if (loading) {
+    return (
+      <div className="space-y-6 max-w-4xl mx-auto">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <div className="h-7 w-48 bg-surface rounded-xl animate-pulse" />
+            <div className="h-4 w-64 bg-surface rounded-md animate-pulse" />
           </div>
-          <p className="text-xs sm:text-sm text-slate-400">
-            Access certified lab test panels, biometric reference ranges, and clinical ordering notes.
+        </div>
+        <TableSkeleton rows={4} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto">
+      {/* 3. Offline Notice Banner */}
+      {isOffline && (
+        <aside
+          role="status"
+          className="p-3.5 rounded-2xl bg-surface border border-border text-xs text-text-muted flex items-center gap-2"
+        >
+          <WifiOff className="w-4 h-4 text-caution shrink-0" />
+          <span>Offline mode active. Displaying cached laboratory records. Reconnect to fetch latest updates.</span>
+        </aside>
+      )}
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-text-strong tracking-tight flex items-center gap-2.5">
+            <FlaskConical className="w-6 h-6 text-primary" />
+            Laboratory & Pathology Results
+          </h1>
+          <p className="text-xs text-text-muted">
+            Clinical test panels, reference ranges, and verified diagnostic reports
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={fetchLabs}
-            disabled={loading}
-            className="p-3 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-teal-500 transition"
-            title="Refresh lab panels"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <button
-            onClick={() => alert('Exporting all patient laboratory panels as certified clinical PDF...')}
-            className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs sm:text-sm shadow-md shadow-teal-600/20 transition"
-          >
-            <Download className="w-4 h-4" /> Export All PDF Reports
-          </button>
+        <Button
+          size="sm"
+          variant="quiet"
+          className="border border-border self-start sm:self-center"
+          onClick={fetchLabs}
+          title="Refresh lab results"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
+      </div>
+
+      {/* MANDATORY CLINICAL DISCLAIMER (Neutral Styling) */}
+      <div className="p-4 rounded-2xl bg-surface border border-border flex items-start gap-3 text-xs text-text-body">
+        <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+        <div className="space-y-1 leading-relaxed">
+          <strong className="text-text-strong block font-bold">
+            Your clinician will explain your results.
+          </strong>
+          <span>
+            Laboratory findings are evaluated alongside your complete health history, symptoms, and current care plan. Individual values should never be interpreted in isolation or used to alter medication schedules without medical direction.
+          </span>
         </div>
       </div>
 
-      {/* Lab Reports Cards List */}
-      <div className="space-y-6">
-        {loading ? (
-          <div className="space-y-6">
-            <div className={`p-6 sm:p-8 rounded-3xl border ${theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200'}`}>
-              <TableSkeleton rows={4} cols={4} />
-            </div>
-            <div className={`p-6 sm:p-8 rounded-3xl border ${theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200'}`}>
-              <TableSkeleton rows={3} cols={4} />
-            </div>
+      {/* 4. Error State */}
+      {error && (
+        <div className="p-4 rounded-2xl bg-critical/10 border border-critical/30 text-critical text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
           </div>
-        ) : labs.length === 0 ? (
-          <div className={`p-12 text-center rounded-3xl border ${
-            theme === 'dark' ? 'bg-slate-900/60 border-slate-800' : 'bg-white border-slate-200'
-          }`}>
-            <FlaskConical className="w-10 h-10 text-teal-500 mx-auto mb-2 opacity-60" />
-            <p className="text-sm font-semibold text-slate-400">No laboratory test panels recorded yet.</p>
-          </div>
-        ) : (
-          labs.map((panel) => {
-            const dateStr = new Date(panel.collectionDate).toLocaleDateString(undefined, {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-            });
-            const hasOutOfRange = panel.markers?.some((m) => m.isOutOfRange);
+          <Button size="sm" variant="secondary" onClick={fetchLabs}>
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {/* 5. Empty State or Lab Panels List */}
+      {labs.length === 0 ? (
+        <EmptyState
+          title="No laboratory results recorded yet"
+          description="When your care team or diagnostic facility uploads bloodwork, metabolic panels, or pathology findings, they will appear here."
+        />
+      ) : (
+        <div className="space-y-4">
+          {labs.map((panel) => {
+            const collectionDate = panel.collectionDate ? new Date(panel.collectionDate).toLocaleDateString() : 'Recent';
+            const markers = panel.markers || [];
 
             return (
               <div
                 key={panel._id}
-                className={`p-6 sm:p-8 rounded-3xl border transition-all shadow-sm space-y-6 ${
-                  theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200'
-                }`}
+                className="p-6 rounded-3xl bg-surface border border-border shadow-sm space-y-4"
               >
-                {/* Header info */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
-                  <div className="flex items-start space-x-4">
-                    <div className="p-3 bg-teal-500/15 text-teal-600 dark:text-teal-300 rounded-2xl border border-teal-500/30 shrink-0">
-                      <FileText className="w-6 h-6" />
+                {/* Panel Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-base text-text-strong">
+                        {panel.panelName || 'Diagnostic Panel'}
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-canvas border border-border text-[10px] uppercase font-bold text-text-muted">
+                        {panel.panelCategory || 'Routine'}
+                      </span>
                     </div>
-                    <div>
-                      <div className="flex items-center space-x-3">
-                        <h3 className="font-extrabold text-base dark:text-white text-slate-900">
-                          {panel.panelName}
-                        </h3>
-                        <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
-                          hasOutOfRange
-                            ? 'bg-amber-500/10 text-amber-500 border-amber-500/30'
-                            : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
-                        }`}>
-                          {hasOutOfRange ? 'Attention Required' : 'Optimal'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        {panel.laboratory} • Ordered by {panel.orderingClinicianId?.name || 'Dr. Sarah Jenkins, MD'}
-                      </p>
+                    <div className="text-xs text-text-muted">
+                      Facility: {panel.labFacility || 'Clinical Pathology Core'} • Ordered by: {panel.orderingClinicianId?.name || 'Care Team'}
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-3">
-                    <span className="text-xs font-semibold text-slate-400 flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5 text-teal-500" /> {dateStr}
-                    </span>
-                    <button
-                      onClick={() => alert(`Downloading official clinical PDF report for ${panel.panelName}`)}
-                      className="p-2.5 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-600 dark:text-teal-300 text-xs font-bold transition flex items-center gap-1"
-                    >
-                      <Download className="w-4 h-4" /> PDF Report
-                    </button>
+                  <div className="text-xs text-text-muted flex items-center gap-1.5 self-start sm:self-center">
+                    <Calendar className="w-3.5 h-3.5 text-primary" />
+                    <span>Collected: <strong className="text-text-strong font-semibold">{collectionDate}</strong></span>
                   </div>
                 </div>
 
-                {/* Overall Impression Box if present */}
-                {panel.overallImpression && (
-                  <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 text-xs space-y-1">
-                    <span className="font-bold text-teal-600 dark:text-teal-400 block uppercase tracking-wider text-[10px]">
-                      Pathologist / Clinical Interpretation:
-                    </span>
-                    <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
-                      {panel.overallImpression}
-                    </p>
+                {/* Markers List */}
+                {markers.length > 0 ? (
+                  <div className="divide-y divide-border/60">
+                    {markers.map((m, idx) => (
+                      <div key={idx} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                        <div className="space-y-0.5">
+                          <div className="font-bold text-text-strong">{m.name}</div>
+                          {m.loincCode && (
+                            <div className="text-[10px] font-mono text-text-muted">
+                              LOINC: {m.loincCode}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-6 sm:text-right">
+                          {/* Value */}
+                          <div>
+                            <div className="font-mono font-bold text-sm text-text-strong">
+                              {m.value} {m.unit}
+                            </div>
+                            {/* Source reference range */}
+                            <div className="text-[11px] text-text-muted">
+                              Reference: {m.referenceRange || 'Standard adult range'}
+                            </div>
+                          </div>
+
+                          {/* Status Indicator (Neutral styling) */}
+                          <div className="min-w-[70px] text-right">
+                            {m.flag ? (
+                              <span className="px-2 py-0.5 rounded bg-caution/15 text-caution font-semibold text-[10px] border border-caution/30">
+                                {m.flag}
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded bg-primary/10 text-primary font-semibold text-[10px]">
+                                Normal
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-text-muted italic py-2">
+                    {panel.overallInterpretation || 'Panel processed and verified by clinical pathology.'}
                   </div>
                 )}
-
-                {/* Metrics Breakdown Table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="text-slate-400 border-b border-slate-200 dark:border-slate-800 font-bold uppercase tracking-wider text-[11px]">
-                        <th className="pb-3 pl-2">Biomarker Component</th>
-                        <th className="pb-3">Result Value</th>
-                        <th className="pb-3">Reference Range</th>
-                        <th className="pb-3">Clinical Evaluation</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                      {panel.markers?.map((m, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-950/40">
-                          <td className="py-3.5 pl-2 font-bold dark:text-slate-200 text-slate-800">{m.name}</td>
-                          <td className="py-3.5 font-extrabold text-teal-600 dark:text-teal-300">
-                            {m.value} {m.unit}
-                          </td>
-                          <td className="py-3.5 text-slate-500 dark:text-slate-400">{m.referenceRange}</td>
-                          <td className="py-3.5">
-                            <span className={`inline-flex items-center gap-1 font-bold text-[11px] ${
-                              m.isOutOfRange
-                                ? 'text-amber-500'
-                                : 'text-emerald-500'
-                            }`}>
-                              {m.isOutOfRange ? <AlertTriangle className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                              {m.isOutOfRange ? (m.interpretation || 'Out of Range') : 'Within Range'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
               </div>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
     </div>
   );
 }

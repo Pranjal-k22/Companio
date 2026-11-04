@@ -10,8 +10,37 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+    <!-- No-Flash Early Theme & Font Size Bootstrap -->
+    <script>
+      (function() {
+        try {
+          var mode = localStorage.getItem('companio_theme_mode') || localStorage.getItem('companio_theme') || 'auto';
+          var isDark = false;
+          if (mode === 'night' || mode === 'dark') {
+            isDark = true;
+          } else if (mode === 'day' || mode === 'light') {
+            isDark = false;
+          } else {
+            isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          }
+          var root = document.documentElement;
+          if (isDark) {
+            root.setAttribute('data-theme', 'night');
+            root.classList.add('dark');
+            root.classList.remove('light');
+          } else {
+            root.setAttribute('data-theme', 'day');
+            root.classList.add('light');
+            root.classList.remove('dark');
+          }
+          var textSize = localStorage.getItem('companio_text_size') || '100';
+          root.classList.remove('text-size-100', 'text-size-125', 'text-size-150');
+          root.classList.add('text-size-' + textSize);
+        } catch (e) {}
+      })();
+    </script>
   </head>
-  <body class="bg-slate-950 text-slate-100 font-sans antialiased selection:bg-teal-500 selection:text-white">
+  <body class="bg-canvas text-text-body font-sans antialiased selection:bg-accent selection:text-on-accent">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

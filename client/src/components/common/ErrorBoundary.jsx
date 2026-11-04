@@ -47,7 +47,7 @@ export class ErrorBoundary extends React.Component {
               <PhoneCall className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
               <div className="text-xs text-amber-200/90 space-y-1">
                 <span className="font-semibold block text-amber-300">Urgent Medical Notice:</span>
-                If you are experiencing an acute medical emergency (severe chest pain, sudden breathlessness, or stroke symptoms), do not wait for this portal. Call <strong className="text-white underline">911</strong> immediately or proceed to the nearest emergency room.
+                If you are experiencing an acute medical emergency (severe chest pain, sudden breathlessness, or stroke symptoms), do not wait for this portal. Call emergency services (911 or your local emergency number) immediately or proceed to the nearest emergency room.
               </div>
             </div>
 
