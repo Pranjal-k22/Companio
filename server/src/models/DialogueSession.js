@@ -117,6 +117,12 @@ const dialogueSessionSchema = new mongoose.Schema(
     completedAt: {
       type: Date,
     },
+    assistedByCaregiver: {
+      isAssisted: { type: Boolean, default: false },
+      caregiverUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      caregiverRelationshipId: { type: mongoose.Schema.Types.ObjectId, ref: 'CaregiverRelationship' },
+      assistedAt: { type: Date },
+    },
   },
   {
     timestamps: true,

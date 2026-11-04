@@ -95,3 +95,4 @@ export function calculateDataCompleteness({
 }
 
 export default calculateDataCompleteness;
+

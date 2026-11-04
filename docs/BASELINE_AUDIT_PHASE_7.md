@@ -190,3 +190,4 @@ To meet enterprise healthcare standards, Phase 7 will implement:
 6. **`ReportAttestation` Model & `AttestationService`**: Formal clinician review, attestation statements, and tamper-evident audit logs.
 7. **REST APIs & Clinician Workspace**: Complete API suite under `/api/v1/reports`, interactive review/attestation UI, and secure PDF export.
 8. **Weekly Worker Hardening**: Scoped batch generation producing `PENDING_REVIEW` drafts with error isolation.
+

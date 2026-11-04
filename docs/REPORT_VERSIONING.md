@@ -76,3 +76,4 @@ Reports maintain bidirectional lineage pointers:
 - If newer observations exist:
   - If report is `DRAFT` or `PENDING_REVIEW`: Status transitions to `STALE` with a detailed `staleReason`.
   - If report is `APPROVED`: Remains immutable; UI alerts clinician that newer observations exist.
+

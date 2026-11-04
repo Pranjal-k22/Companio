@@ -107,3 +107,4 @@ export function calculateSleepMetrics(aggregatedData) {
 }
 
 export default calculateSleepMetrics;
+

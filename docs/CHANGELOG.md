@@ -5,6 +5,38 @@ All notable changes to the Companio healthcare platform will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-11-04
+
+### Added
+- **Caregiver & Family Portal Architecture**: Comprehensive delegation and coordination subsystem enabling authorized family members and caregivers to support adults 55+ (`CAREGIVER_PORTAL_ARCHITECTURE.md`).
+- **Caregiver Domain Models**:
+  - `CaregiverRelationship.js`: Multi-tenant relationship model tracking status lifecycle, encrypted invitation tokens, and legal authority.
+  - `CaregiverAccessGrant.js`: Versioned permission grants with 13 granular scopes and expiration.
+  - `CaregiverConcern.js`: Caregiver-reported observation model (`sourceType: 'CAREGIVER_REPORTED'`) with Phase 5 safety net flag linkage.
+  - `CaregiverAccessEvent.js`: Immutable append-only audit trail capturing all caregiver reads, assistance events, and permission evaluations with IP, User-Agent, and correlation IDs.
+- **Granular Scopes & Strict Negative Boundaries**: 13 granular permissions cataloged in `CAREGIVER_PERMISSION_MATRIX.md` with hardcoded prohibitions on medication modification, diagnosis creation, report attestation, and flag resolution.
+- **Cryptographic Onboarding Lifecycle**: 32-byte hex token generation with SHA-256 database storage, 7-day TTL, and instant single-use burn protection (`CAREGIVER_CONSENT_WORKFLOW.md`).
+- **One-Click Instant Revocation**: Real-time permission termination immediately cutting off data access and suppressing notifications.
+- **Assisted Voice Check-in Protocol**: In-room caregiver assistance protocol with real-time speaker attribution (`PATIENT_SPEAKER`, `CAREGIVER_ASSISTANT`, `CAREGIVER_REPORT`) and strict patient-confirmation invariant (`CAREGIVER_VOICE_ASSISTANCE.md`).
+- **Caregiver Concern Safety Net Integration**: Keyword scanning and automatic RED flag triggering for acute symptoms reported by caregivers, with instant 911 emergency guidance.
+- **Notification Governance & PHI Minimization**: Scoped alert dispatch adhering to HIPAA minimum necessary rules (`CAREGIVER_NOTIFICATION_POLICY.md`).
+- **Patient & Caregiver Portal Frontend**:
+  - `PatientCaregiverAccess.jsx`: Accessible Patient Permission Center with plain-English scope toggles, invite modal, and real-time audit ledger.
+  - `CaregiverDashboard.jsx`: Central hub for linked loved ones, wellness summaries, and quick actions.
+  - `CaregiverPatientOverview.jsx`: Permitted wellness score, last check-in timestamp, and safe status cards.
+  - `CaregiverCheckins.jsx`: Timeline of completed check-ins with patient confirmation status.
+  - `CaregiverAppointments.jsx`: Clinic appointment calendar.
+  - `CaregiverConcerns.jsx`: Structured observation submission form with emergency banners.
+  - `CaregiverNotifications.jsx`: In-app notification center and preference controls.
+- **Caregiver REST API Suite**: 15 versioned endpoints under `/api/v1/caregivers`, `/api/v1/caregiver`, and `/api/v1/patients/:id/caregivers`.
+- **Phase 8 Master Test Suite**: 10 unit/integration test suites verifying token hashing, negative boundaries, granular scopes, voice assistance, audit immutability, and 15 REST endpoints (`testCaregiverMaster.js`).
+
+### Changed
+- **Removed Dangerous Emergency-Contact Heuristic**: Upgraded `server/src/middleware/tenantAuthorization.js` to eradicate unverified email matching and require formal `getEffectiveCaregiverGrant` validation.
+- Upgraded `Observation.js` with `'CAREGIVER_REPORTED'` sourceType and `'CAREGIVER'` performerType.
+- Upgraded `DialogueSession.js` with `assistedByCaregiver` sub-document.
+- Updated `App.jsx` and `Sidebar.jsx` with caregiver routing and navigation.
+
 ## [1.7.0] - 2026-11-04
 
 ### Added

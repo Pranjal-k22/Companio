@@ -94,3 +94,4 @@ $$\text{Completeness Ratio} = \min\left(1.0, \frac{\text{Available Valid Data Po
   - $0.50 \le \text{ratio} < 0.85 \rightarrow \text{PARTIAL}$
   - $< 0.50 \rightarrow \text{INSUFFICIENT\_DATA}$
 - Explicitly lists clinical limitations in report metadata and clinician displays.
+

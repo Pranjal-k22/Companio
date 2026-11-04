@@ -83,3 +83,4 @@ export function calculateWeightMetrics(aggregatedData) {
 }
 
 export default calculateWeightMetrics;
+

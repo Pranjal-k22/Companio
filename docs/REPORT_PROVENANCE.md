@@ -51,3 +51,4 @@ Every narrative section retains links to source entities:
 - **`sourceType`**: `OBSERVATION`, `FLAG`, `METRIC`, `PATIENT_PROFILE`.
 - **`sourceId`**: Database ObjectId or metric key path.
 - **`confidence`**: Degree of certainty ($1.0$ for deterministic metrics).
+

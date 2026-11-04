@@ -97,3 +97,4 @@ reportAttestationSchema.index({ organizationId: 1, clinicianUserId: 1, approvedA
 
 export const ReportAttestation = mongoose.model('ReportAttestation', reportAttestationSchema);
 export default ReportAttestation;
+

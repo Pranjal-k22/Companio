@@ -43,3 +43,4 @@ Clinical reports can be exported as structured, accessible PDF documents via `PO
 - Only authenticated clinicians and administrators in the patient's organization may export reports.
 - Patient-specific access is governed by `requireCareTeamOrSelf`.
 - Cross-tenant requests return `403 Forbidden`.
+

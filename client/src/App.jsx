@@ -18,6 +18,7 @@ import PatientPathology from './pages/PatientPathology';
 import PatientDoctors from './pages/PatientDoctors';
 import PatientSettings from './pages/PatientSettings';
 import CheckInComplete from './pages/CheckInComplete';
+import PatientCaregiverAccess from './pages/patient/PatientCaregiverAccess';
 
 // Clinician Pages
 import ClinicianDashboard from './pages/ClinicianDashboard';
@@ -25,6 +26,14 @@ import PatientDetail from './pages/PatientDetail';
 import ClinicianAppointments from './pages/ClinicianAppointments';
 import ClinicianVoiceLogs from './pages/ClinicianVoiceLogs';
 import ClinicianSettings from './pages/ClinicianSettings';
+
+// Caregiver Pages
+import CaregiverDashboard from './pages/caregiver/CaregiverDashboard';
+import CaregiverPatientOverview from './pages/caregiver/CaregiverPatientOverview';
+import CaregiverCheckins from './pages/caregiver/CaregiverCheckins';
+import CaregiverAppointments from './pages/caregiver/CaregiverAppointments';
+import CaregiverConcerns from './pages/caregiver/CaregiverConcerns';
+import CaregiverNotifications from './pages/caregiver/CaregiverNotifications';
 
 // Root Redirect Helper
 function RootRedirect() {
@@ -44,6 +53,10 @@ function RootRedirect() {
 
   if (user.role === 'CLINICIAN' || user.role === 'ADMIN') {
     return <Navigate to="/clinician/dashboard" replace />;
+  }
+
+  if (user.role === 'CAREGIVER') {
+    return <Navigate to="/caregiver/dashboard" replace />;
   }
 
   return <Navigate to="/patient/home" replace />;
@@ -123,11 +136,83 @@ export default function App() {
               }
             />
             <Route
+              path="/patient/caregivers"
+              element={
+                <ProtectedRoute allowedRoles={['PATIENT']}>
+                  <AppLayout pageTitle="Family & Caregiver Access">
+                    <PatientCaregiverAccess />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/patient/checkin-complete"
               element={
                 <ProtectedRoute allowedRoles={['PATIENT']}>
                   <AppLayout pageTitle="Check-in Confirmed">
                     <CheckInComplete />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Protected Caregiver Routes */}
+            <Route
+              path="/caregiver/dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['CAREGIVER']}>
+                  <AppLayout pageTitle="Caregiver Dashboard">
+                    <CaregiverDashboard />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/caregiver/patient/:patientId"
+              element={
+                <ProtectedRoute allowedRoles={['CAREGIVER']}>
+                  <AppLayout pageTitle="Loved One Overview">
+                    <CaregiverPatientOverview />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/caregiver/checkins"
+              element={
+                <ProtectedRoute allowedRoles={['CAREGIVER']}>
+                  <AppLayout pageTitle="Check-in History">
+                    <CaregiverCheckins />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/caregiver/appointments"
+              element={
+                <ProtectedRoute allowedRoles={['CAREGIVER']}>
+                  <AppLayout pageTitle="Appointments">
+                    <CaregiverAppointments />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/caregiver/concerns"
+              element={
+                <ProtectedRoute allowedRoles={['CAREGIVER']}>
+                  <AppLayout pageTitle="Report Concern">
+                    <CaregiverConcerns />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/caregiver/notifications"
+              element={
+                <ProtectedRoute allowedRoles={['CAREGIVER']}>
+                  <AppLayout pageTitle="Notifications">
+                    <CaregiverNotifications />
                   </AppLayout>
                 </ProtectedRoute>
               }

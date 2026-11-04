@@ -125,13 +125,14 @@ const observationSchema = new mongoose.Schema(
         'DEVICE_MEASURED',
         'EXTERNAL_IMPORT',
         'SYSTEM_DERIVED',
+        'CAREGIVER_REPORTED',
       ],
       default: 'PATIENT_REPORTED',
       required: true,
     },
     performerType: {
       type: String,
-      enum: ['PATIENT', 'CLINICIAN', 'SYSTEM'],
+      enum: ['PATIENT', 'CLINICIAN', 'SYSTEM', 'CAREGIVER'],
       default: 'PATIENT',
     },
     conversationId: {

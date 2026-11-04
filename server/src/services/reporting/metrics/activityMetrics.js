@@ -94,3 +94,4 @@ export function calculateActivityMetrics(aggregatedData) {
 }
 
 export default calculateActivityMetrics;
+

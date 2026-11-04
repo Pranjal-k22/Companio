@@ -1185,6 +1185,210 @@ paths:
         '200':
           description: Observation verified
 
+  /patients/{id}/caregivers/invitations:
+    post:
+      summary: Create Caregiver Invitation
+      description: Generates a single-use SHA-256 hashed cryptographic invitation for family or caregiver.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [caregiverEmail, relationshipType, scopes]
+              properties:
+                caregiverEmail:
+                  type: string
+                  format: email
+                relationshipType:
+                  type: string
+                  enum: [SPOUSE, ADULT_CHILD, FAMILY_MEMBER, PROFESSIONAL_CAREGIVER, LEGAL_GUARDIAN, TRUSTED_FRIEND, OTHER]
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                legalAuthorityType:
+                  type: string
+                  enum: [POWER_OF_ATTORNEY, HEALTHCARE_PROXY, CONSERVATOR, LEGAL_GUARDIAN, INFORMAL_FAMILY, NONE]
+                notes:
+                  type: string
+      responses:
+        '201':
+          description: Invitation created successfully
+
+  /patients/{id}/caregivers:
+    get:
+      summary: List Patient Caregivers
+      description: Lists all caregiver relationships and active scopes for the patient.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Caregivers and relationships retrieved
+
+  /caregivers/invitations/{id}/revoke:
+    post:
+      summary: Revoke Caregiver Access
+      description: Patient or clinician instantly revokes caregiver relationship and access grants.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Caregiver access revoked immediately
+
+  /caregivers/invitations:
+    get:
+      summary: List Pending Invitations
+      description: Lists pending caregiver invitations matching the authenticated user.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Pending invitations list
+
+  /caregivers/invitations/{id}/accept:
+    post:
+      summary: Accept Caregiver Invitation
+      description: Caregiver validates cryptographic token and links patient relationship.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        '200':
+          description: Invitation accepted and account linked
+
+  /caregiver/patients:
+    get:
+      summary: List Authorized Patients
+      description: Returns all patients linked to the authenticated caregiver with active scopes.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of linked patients
+
+  /caregiver/patients/{id}/overview:
+    get:
+      summary: Caregiver Patient Overview
+      description: Retrieves permitted high-level wellness score and safe status indicators.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Patient overview returned
+
+  /caregiver/patients/{id}/concerns:
+    post:
+      summary: Submit Caregiver Concern
+      description: Submits an attributed caregiver observation, evaluated against the Phase 5 safety net.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category, description]
+              properties:
+                category:
+                  type: string
+                description:
+                  type: string
+                observedAt:
+                  type: string
+                  format: date-time
+      responses:
+        '201':
+          description: Concern recorded and evaluated
+
+  /caregiver/patients/{id}/voice-assistance:
+    post:
+      summary: Start Voice Assistance Session
+      description: Associates caregiver metadata with an assisted voice check-in session.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Voice assistance session initialized
+
+  /patients/{id}/caregiver-access-events:
+    get:
+      summary: Get Patient Caregiver Access Events
+      description: Retrieves tamper-evident accounting of disclosures for caregiver data views.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Audit trail retrieved
+
 components:
   securitySchemes:
     bearerAuth:

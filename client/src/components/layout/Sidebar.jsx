@@ -19,6 +19,9 @@ import {
   Type,
   ShieldCheck,
   Stethoscope,
+  Users,
+  Bell,
+  MessageSquarePlus,
 } from 'lucide-react';
 
 export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) {
@@ -27,14 +30,24 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
   const navigate = useNavigate();
 
   const isClinician = user?.role === 'CLINICIAN' || user?.role === 'ADMIN';
+  const isCaregiver = user?.role === 'CAREGIVER';
 
   const patientNavItems = [
     { label: 'Overview', path: '/patient/home', icon: LayoutDashboard },
     { label: 'Appointments', path: '/patient/appointments', icon: Calendar },
     { label: 'AI Voice Check-in', path: '/patient/voice-checkin', icon: Mic, badge: 'Live' },
+    { label: 'Family & Caregivers', path: '/patient/caregivers', icon: Users },
     { label: 'Pathology Results', path: '/patient/pathology', icon: FileText },
     { label: 'Doctors & Specialists', path: '/patient/doctors', icon: UserCheck },
     { label: 'Settings', path: '/patient/settings', icon: Settings },
+  ];
+
+  const caregiverNavItems = [
+    { label: 'Dashboard', path: '/caregiver/dashboard', icon: LayoutDashboard },
+    { label: 'Check-in Assistance', path: '/caregiver/checkins', icon: HeartPulse },
+    { label: 'Appointments', path: '/caregiver/appointments', icon: Calendar },
+    { label: 'Report Concerns', path: '/caregiver/concerns', icon: MessageSquarePlus },
+    { label: 'Notifications', path: '/caregiver/notifications', icon: Bell },
   ];
 
   const clinicianNavItems = [
@@ -44,7 +57,11 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
     { label: 'Clinic Settings', path: '/clinician/settings', icon: Settings },
   ];
 
-  const navItems = isClinician ? clinicianNavItems : patientNavItems;
+  const navItems = isClinician
+    ? clinicianNavItems
+    : isCaregiver
+    ? caregiverNavItems
+    : patientNavItems;
 
   return (
     <>
@@ -69,7 +86,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
         {/* Brand Header */}
         <div className="h-20 px-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80">
           <div
-            onClick={() => navigate(isClinician ? '/clinician/dashboard' : '/patient/home')}
+            onClick={() => navigate(isClinician ? '/clinician/dashboard' : isCaregiver ? '/caregiver/dashboard' : '/patient/home')}
             className="flex items-center space-x-3 cursor-pointer overflow-hidden"
           >
             <div className="p-2.5 bg-gradient-to-tr from-teal-500 to-emerald-400 text-slate-950 rounded-2xl shadow-lg shadow-teal-500/20 shrink-0">

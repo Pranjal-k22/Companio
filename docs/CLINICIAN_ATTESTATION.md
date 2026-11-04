@@ -48,3 +48,4 @@ Default statement presented in the Clinician Workspace:
 2. **Preview**: Clinician clicks "Review & Attest". The backend checks organization tenancy and computes the current SHA-256 hash.
 3. **Attestation Submission**: Clinician confirms the attestation statement.
 4. **Immutability Enforcement**: The report status transitions to `APPROVED`, locking all fields. Any subsequent modification must go through the formal `POST /api/v1/reports/:id/amend` route.
+

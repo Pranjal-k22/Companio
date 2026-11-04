@@ -104,3 +104,4 @@ export function calculateMedicationAdherence(aggregatedData) {
 }
 
 export default calculateMedicationAdherence;
+

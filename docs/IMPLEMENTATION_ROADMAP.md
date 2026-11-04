@@ -3,7 +3,7 @@
 **Document Reference**: `docs/IMPLEMENTATION_ROADMAP.md`  
 **Target Architecture**: Modular Monolith + Dedicated Voice Gateway + Distributed Worker  
 **Product**: AI Voice-First Health & Wellness Platform for Adults 55+  
-**Current Phase**: Phase 7 Complete (Awaiting Phase 8 Authorization)  
+**Current Phase**: Phase 8 Complete (Awaiting Phase 9 Authorization)  
 **Execution Philosophy**: Small verified increments; zero disruption to working code; preserve existing route compatibility.
 
 ---
@@ -11,9 +11,9 @@
 ## Roadmap Overview
 
 ```
-Phase 0 [DONE] ──► Phase 1 [DONE] ──► Phase 2 [DONE] ──► Phase 3 [DONE] ──► Phase 4 [DONE] ──► Phase 5 [DONE] ──► Phase 6 [DONE] ──► Phase 7 [DONE] ──► Phase 8 [NEXT]
-Baseline Audit     API & v1           Tenancy & Auth     Consent &          Voice Hard-        Safety Net &       Dialogue &         Reporting &        Platform Polish
-                   Foundations                           Privacy            ening              Escalation         Observations       Attestation
+Phase 0 [DONE] ──► Phase 1 [DONE] ──► Phase 2 [DONE] ──► Phase 3 [DONE] ──► Phase 4 [DONE] ──► Phase 5 [DONE] ──► Phase 6 [DONE] ──► Phase 7 [DONE] ──► Phase 8 [DONE] ──► Phase 9 [NEXT]
+Baseline Audit     API & v1           Tenancy & Auth     Consent &          Voice Hard-        Safety Net &       Dialogue &         Reporting &        Caregiver Portal   Distributed Jobs
+                   Foundations                           Privacy            ening              Escalation         Observations       Attestation        & Delegation
 ```
 
 ---
@@ -163,19 +163,24 @@ Baseline Audit     API & v1           Tenancy & Auth     Consent &          Voic
 
 ---
 
-## Phase 8: Platform Feature Completion & Clean UI Binding (Status: ⏳ NEXT)
-* **Goal**: Eliminate all remaining mock data across secondary pages, connect caregiver views, and provide clinician triage configuration.
-* **Key Tasks**:
-  1. Verify and polish `PatientAppointments.jsx`, `ClinicianAppointments.jsx`, `PatientPathology.jsx`, `ClinicianVoiceLogs.jsx`.
-  2. Wire `PatientDoctors.jsx` to real clinician directory API (`GET /api/v1/organizations/:id/clinicians`).
-  3. Add caregiver portal view (`/caregiver/overview`) respecting granted scopes.
-  4. Implement notification quiet hours and channel preferences in patient and clinician settings.
-  5. Mark all synthetic seed data clearly with `[SYNTHETIC TEST RECORD]` badges in demo mode.
-* **Exit Criteria**: Every navigation tab in both patient and clinician portals loads real API data with zero mock scripts.
+## Phase 8: Caregiver & Family Portal Integration (Status: ✅ COMPLETED)
+* **Goal**: Introduce a secure caregiver and family portal allowing authorized family members and caregivers to assist patients aged 55+ without granting unrestricted medical-record access.
+* **Deliverables**:
+  - Core Domain Models: `CaregiverRelationship.js`, `CaregiverAccessGrant.js`, `CaregiverConcern.js`, `CaregiverAccessEvent.js`.
+  - 13 Granular Scopes Catalog and Strict Negative Permission boundaries prohibiting prescription modification, diagnosis creation, report attestation, and flag resolution (`CAREGIVER_PERMISSION_MATRIX.md`).
+  - Cryptographic Onboarding Lifecycle: 32-byte hex token generation with SHA-256 database storage, 7-day TTL, and instant single-use burn protection (`CAREGIVER_CONSENT_WORKFLOW.md`).
+  - Emergency Contact Heuristic Eradication: Replaced legacy email matching with formal `getEffectiveCaregiverGrant` validation.
+  - Assisted Voice Check-in Protocol: Real-time speaker attribution (`PATIENT_SPEAKER`, `CAREGIVER_ASSISTANT`, `CAREGIVER_REPORT`) and strict patient verbal confirmation invariant (`CAREGIVER_VOICE_ASSISTANCE.md`).
+  - Caregiver Concern Safety Net: Keyword analysis and automatic RED flag triggering for acute symptoms with instant 911 emergency guidance.
+  - Caregiver Notification Governance: Scoped notification dispatch adhering to HIPAA minimum necessary standards (`CAREGIVER_NOTIFICATION_POLICY.md`).
+  - Patient & Caregiver Modern UI: `PatientCaregiverAccess.jsx`, `CaregiverDashboard.jsx`, `CaregiverPatientOverview.jsx`, `CaregiverCheckins.jsx`, `CaregiverAppointments.jsx`, `CaregiverConcerns.jsx`, `CaregiverNotifications.jsx`.
+  - 15 versioned REST endpoints under `/api/v1/caregivers`, `/api/v1/caregiver`, and `/api/v1/patients/:id/caregivers`.
+  - Automated Master Verification Suite: `server/src/testCaregiverMaster.js` (10/10 modules, 15/15 REST endpoints passing).
+* **Exit Criteria**: 100% of Phase 8 automated checks passing; Phase 4–7 regression checks passing (309/309); frontend production build passing; zero regressions. (Met on 2026-11-04)
 
 ---
 
-## Phase 9: Distributed Background Jobs (Redis & BullMQ)
+## Phase 9: Distributed Background Jobs (Redis & BullMQ) (Status: ⏳ NEXT)
 * **Goal**: Transition from single-instance in-memory `node-cron` to durable distributed job queues with BullMQ, Redis, idempotency keys, and dead-letter queues.
 * **Key Tasks**:
   1. Configure optional Redis connection (`REDIS_URL`) with graceful in-memory fallback for local single-node development.

@@ -29,3 +29,4 @@ export async function runTestWeeklyReportAutomation({ orgId }) {
 }
 
 export default runTestWeeklyReportAutomation;
+

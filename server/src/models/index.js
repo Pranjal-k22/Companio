@@ -22,6 +22,23 @@ import DialogueSession from './DialogueSession.js';
 import Observation, { LOINC_MAPPINGS } from './Observation.js';
 import ReportAttestation, { ATTESTATION_STATEMENT_DEFAULT } from './ReportAttestation.js';
 import { REPORT_STATUSES, REPORT_TYPES, NARRATION_MODES } from './Report.js';
+import CaregiverRelationship, {
+  RELATIONSHIP_TYPES,
+  AUTHORIZATION_TYPES,
+  RELATIONSHIP_STATUSES,
+} from './CaregiverRelationship.js';
+import CaregiverAccessGrant, {
+  CAREGIVER_PERMISSION_SCOPES,
+  GRANT_STATUSES,
+} from './CaregiverAccessGrant.js';
+import CaregiverConcern, {
+  CONCERN_CATEGORIES,
+  CONCERN_STATUSES,
+} from './CaregiverConcern.js';
+import CaregiverAccessEvent, {
+  ACCESS_ACTIONS,
+  ACCESS_RESOURCE_TYPES,
+} from './CaregiverAccessEvent.js';
 
 export {
   User,
@@ -53,6 +70,19 @@ export {
   DialogueSession,
   Observation,
   LOINC_MAPPINGS,
+  CaregiverRelationship,
+  RELATIONSHIP_TYPES,
+  AUTHORIZATION_TYPES,
+  RELATIONSHIP_STATUSES,
+  CaregiverAccessGrant,
+  CAREGIVER_PERMISSION_SCOPES,
+  GRANT_STATUSES,
+  CaregiverConcern,
+  CONCERN_CATEGORIES,
+  CONCERN_STATUSES,
+  CaregiverAccessEvent,
+  ACCESS_ACTIONS,
+  ACCESS_RESOURCE_TYPES,
 };
 
 export default {
@@ -73,4 +103,8 @@ export default {
   SafetyRule,
   DialogueSession,
   Observation,
+  CaregiverRelationship,
+  CaregiverAccessGrant,
+  CaregiverConcern,
+  CaregiverAccessEvent,
 };

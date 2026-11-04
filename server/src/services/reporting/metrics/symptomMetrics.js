@@ -112,3 +112,4 @@ export function calculateSymptomMetrics(aggregatedData) {
 }
 
 export default calculateSymptomMetrics;
+

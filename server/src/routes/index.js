@@ -11,6 +11,7 @@ import conversationsRouter from './conversations.js';
 import organizationRouter from './organizationRoutes.js';
 import dialogueSessionsRouter from './dialogueSessions.js';
 import observationsRouter from './observations.js';
+import caregiversRouter from './caregivers.js';
 
 const apiRouter = express.Router();
 
@@ -31,6 +32,7 @@ apiRouter.use('/lab-results', labResultsRouter);
 apiRouter.use('/conversations', conversationsRouter);
 apiRouter.use('/dialogue-sessions', dialogueSessionsRouter);
 apiRouter.use('/observations', observationsRouter);
+apiRouter.use('/', caregiversRouter);
 
 export default apiRouter;
 

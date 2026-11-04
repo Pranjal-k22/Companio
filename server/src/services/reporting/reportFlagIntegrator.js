@@ -92,3 +92,4 @@ export class ReportFlagIntegrator {
 }
 
 export default ReportFlagIntegrator;
+

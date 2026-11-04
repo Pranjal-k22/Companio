@@ -409,3 +409,76 @@ All endpoints require authentication and are scoped to the active organization t
 - **Body**: `{ reportType?: "WEEKLY_RETROSPECTIVE" | "AD_HOC_SUMMARY", startDate?: string, endDate?: string }`
 - **Description**: Triggers on-demand retrospective report synthesis using pure JavaScript deterministic analytics and validated Gemini narration.
 
+---
+
+## 10. Caregiver Portal & Access Endpoints (Phase 8)
+
+### 10.1 `POST /api/v1/patients/:id/caregivers/invitations`
+- **Access**: Patient (Self) / Authorized Legal Representative
+- **Body**: `{ caregiverEmail: string, relationshipType: string, scopes: string[], legalAuthorityType?: string, notes?: string }`
+- **Description**: Generates single-use cryptographic invitation with SHA-256 token hash and 7-day TTL.
+
+### 10.2 `GET /api/v1/patients/:id/caregivers`
+- **Access**: Patient (Self) / Care-team Clinician
+- **Description**: Lists all active, pending, and revoked caregiver relationships and current access grants for the patient.
+
+### 10.3 `POST /api/v1/caregivers/invitations/:id/revoke`
+- **Access**: Patient (Self) / Care-team Clinician
+- **Body**: `{ reason?: string }`
+- **Description**: One-click instant access revocation. Transitions relationship status to `REVOKED` and invalidates grants.
+
+### 10.4 `GET /api/v1/caregivers/invitations`
+- **Access**: Caregiver (Authenticated User)
+- **Description**: Lists pending invitations matching the authenticated user's email address.
+
+### 10.5 `POST /api/v1/caregivers/invitations/:id/accept`
+- **Access**: Caregiver (Authenticated User)
+- **Body**: `{ token: string }`
+- **Description**: Validates plaintext token against SHA-256 hash, burns the token hash, links the caregiver user account, and activates the relationship.
+
+### 10.6 `GET /api/v1/caregiver/patients`
+- **Access**: Caregiver
+- **Description**: Returns the list of authorized loved ones linked to the caregiver with their active permission grants.
+
+### 10.7 `GET /api/v1/caregiver/patients/:id/overview`
+- **Access**: Caregiver (Requires `WELLNESS_SUMMARY_READ` scope)
+- **Description**: Retrieves high-level permitted wellness score, last check-in timestamp, and safe status indicators.
+
+### 10.8 `GET /api/v1/caregiver/patients/:id/checkins`
+- **Access**: Caregiver (Requires `CHECKIN_HISTORY_READ` scope)
+- **Description**: Returns chronological history of completed check-in dates and high-level summary notes.
+
+### 10.9 `GET /api/v1/caregiver/patients/:id/appointments`
+- **Access**: Caregiver (Requires `APPOINTMENT_READ` scope)
+- **Description**: Returns upcoming clinic visits and consultations for scheduling coordination.
+
+### 10.10 `GET /api/v1/caregiver/patients/:id/medications`
+- **Access**: Caregiver (Requires `MEDICATION_SCHEDULE_READ` scope)
+- **Description**: Returns daily prescribed medication schedule and reminder times (read-only; no modification).
+
+### 10.11 `POST /api/v1/caregiver/patients/:id/concerns`
+- **Access**: Caregiver (Requires `CONCERN_SUBMIT` scope)
+- **Body**: `{ category: string, description: string, observedAt?: string }`
+- **Description**: Submits an attributed caregiver concern (`sourceType: 'CAREGIVER_REPORTED'`). Evaluates against Phase 5 clinical safety net, automatically raising RED flags and returning emergency 911 guidance for acute symptoms.
+
+### 10.12 `GET /api/v1/caregiver/patients/:id/concerns`
+- **Access**: Caregiver (Requires `CONCERN_SUBMIT` or `PATIENT_CONCERNS_READ` scope)
+- **Description**: Lists previous concerns submitted by this caregiver.
+
+### 10.13 `POST /api/v1/caregiver/patients/:id/voice-assistance`
+- **Access**: Caregiver (Requires `VOICE_CHECKIN_ASSIST` scope)
+- **Description**: Initiates an assisted voice check-in session, associating the caregiver metadata with the dialogue session.
+
+### 10.14 `POST /api/v1/caregiver/patients/:id/voice-assistance/:sessionId/end`
+- **Access**: Caregiver (Requires `VOICE_CHECKIN_ASSIST` scope)
+- **Description**: Safely concludes caregiver voice assistance.
+
+### 10.15 `GET /api/v1/patients/:id/caregiver-access-events`
+- **Access**: Patient (Self) / Care-team Clinician
+- **Description**: Returns tamper-evident audit history of all caregiver data views and actions for HIPAA accounting of disclosures.
+
+### 10.16 `GET /api/v1/caregiver/access-events`
+- **Access**: Caregiver
+- **Description**: Returns audit log of data accesses performed by the calling caregiver.
+
+

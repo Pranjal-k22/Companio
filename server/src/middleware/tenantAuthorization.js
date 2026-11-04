@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { Patient, Team } from '../models/index.js';
 import { AuthorizationError, NotFoundError } from '../errors/AppError.js';
 import { PERMISSIONS } from '../constants/permissions.js';
+import { getEffectiveCaregiverGrant } from '../services/caregivers/caregiverPermissionService.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -153,18 +154,26 @@ export function requireCareTeamOrSelf(patientIdParam = 'id') {
         );
       }
 
-      // 3.4 Caregiver Delegated Access
+      // 3.4 Caregiver Delegated Access (Strictly requires active relationship and grant; emergency-contact status is never sufficient)
       if (role === 'CAREGIVER') {
-        const isAuthorizedCaregiver =
-          patient.emergencyContact?.email?.toLowerCase() === req.user.email.toLowerCase() ||
-          patient.emergencyContact?.name?.toLowerCase().includes(req.user.name.toLowerCase());
+        const check = await getEffectiveCaregiverGrant(
+          req.tenant.organizationObjectId,
+          userId,
+          patient._id
+        );
 
-        if (isAuthorizedCaregiver) {
+        if (check.authorized) {
           req.patient = patient;
+          req.caregiverRelationship = check.relationship;
+          req.caregiverGrant = check.grant;
           return next();
         }
 
-        return next(new AuthorizationError('You do not possess an active caregiver authorization grant for this patient.'));
+        return next(
+          new AuthorizationError(
+            check.reason || 'You do not possess an active caregiver authorization grant for this patient.'
+          )
+        );
       }
 
       // Default reject

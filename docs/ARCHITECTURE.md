@@ -329,3 +329,42 @@ Prior to starting a speech session on `/voice`:
 - Dynamic PDF export generates in-memory signed clinical summaries with diagonal `DRAFT - NOT CLINICALLY ATTESTED` watermarks for unapproved reports, or full electronic attestation blocks for approved reports.
 - FHIR R4 mapping transforms Companio reports into compliant `DiagnosticReport` and component `Observation` resource bundles.
 
+---
+
+## 14. Caregiver & Family Portal Integration (Phase 8)
+
+### 14.1 Caregiver Authorization & Strict ABAC Scopes
+- Replaced dangerous legacy emergency-contact matching heuristics with formal attribute-based access control (ABAC).
+- Access requires an active `CaregiverRelationship` and an unexpired `CaregiverAccessGrant`.
+- Granular permission model enforces 13 distinct scopes: `PROFILE_READ`, `WELLNESS_SUMMARY_READ`, `CHECKIN_HISTORY_READ`, `MEDICATION_SCHEDULE_READ`, `MEDICATION_ADHERENCE_READ`, `APPOINTMENT_READ`, `APPOINTMENT_COORDINATE`, `OBSERVATIONS_READ`, `PATIENT_CONCERNS_READ`, `REPORT_SUMMARY_READ`, `NOTIFICATION_RECEIVE`, `VOICE_CHECKIN_ASSIST`, `CONCERN_SUBMIT`.
+
+### 14.2 Strict Negative Permission Boundaries
+- Hardcoded technical barriers prevent caregivers from performing clinical operations regardless of relationship type or power-of-attorney status:
+  - No medication prescription modifications or dose changes.
+  - No clinical diagnosis creation.
+  - No clinical report approval or legal attestation.
+  - No clinical safety flag resolution.
+  - No safety rule modification.
+  - No secondary delegation of patient permissions.
+
+### 14.3 Cryptographic Onboarding & Replay Protection
+- Patient generates invitations with cryptographically random 32-byte tokens.
+- Stored exclusively as SHA-256 digests with 7-day TTL; plaintext token is never persisted in MongoDB.
+- Tokens are single-use and burned (`invitationTokenHash = null`) immediately upon acceptance to prevent replay attacks.
+- Patients retain one-click instant revocation capability; revoked status immediately shuts off data access and suppresses notifications.
+
+### 14.4 Assisted Voice Check-in Protocol & Speaker Attribution
+- Allows authorized caregivers (`VOICE_CHECKIN_ASSIST`) to sit with patients during voice check-ins to assist with communication or report observations.
+- Real-time speaker attribution distinguishes `PATIENT_SPEAKER`, `CAREGIVER_ASSISTANT`, and `CAREGIVER_REPORT`.
+- Authoritative confirmation invariant: Caregiver assent can NEVER substitute for explicit patient confirmation on read-back summaries.
+
+### 14.5 Caregiver Concern Safety Net & PHI Minimization
+- Caregivers submit structured observations (`CaregiverConcern`) with immutable `sourceType = 'CAREGIVER_REPORTED'`.
+- Scanned deterministically for acute symptoms via Phase 5 clinical safety net, automatically raising RED/YELLOW flags while providing immediate 911/988 emergency guidance.
+- Caregiver notifications adhere to HIPAA minimum necessary standards, eliminating clinical diagnoses and drug names from external alerts.
+
+### 14.6 Tamper-Evident Access Auditing
+- Every caregiver interaction is recorded in an immutable, append-only ledger (`CaregiverAccessEvent`) with IP address, user agent, request correlation ID, and evaluated scope.
+- Patients have complete visibility into their access history through the Patient Permission Center.
+
+
