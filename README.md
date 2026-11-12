@@ -1,234 +1,192 @@
-# Companio — AI Voice Agent for Healthcare 🎙️🏥
+# Companio
 
-Companio is an intelligent, real-time voice-first healthcare check-in platform designed for adults aged 55+ and post-discharge observation. It enables senior patients to interact with a conversational AI companion using natural voice check-ins while automatically capturing clinical metrics, detecting emergency red flags, generating structured clinician summaries, and triggering real-time SMS/Email escalations.
+**Voice-first health and wellness check-ins for adults aged 55+**
 
-> ⚠️ **Safety & Compliance Notice**: Companio is a clinical support tool designed to assist care teams. It **MUST NOT** diagnose diseases, prescribe treatments, alter medication regimens, or replace professional clinical judgment.
+Companio is a healthcare-support platform that helps older adults complete voice-led daily and weekly wellness check-ins. It structures patient-reported observations, applies a deterministic safety rules layer, supports clinician review and reporting, and provides controlled caregiver participation.
 
----
+> **Clinical boundary:** Companio is a clinician-support and wellness tool. It does not diagnose, prescribe, change treatment, approve care plans autonomously, dispatch emergency services, or replace professional clinical judgment.
 
-## 🏗️ System Architecture
+> **Release status:** The repository's current readiness records authorize synthetic-data engineering and testing. Human recruitment, controlled clinical pilot and commercial production remain gated by external ethics, clinical, contractual and independent security approvals. See [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md).
+
+## Product capabilities
+
+- Patient-facing voice check-ins with speech-to-text, conversational dialogue, spoken responses and accessible controls.
+- Consent-aware voice session lifecycle and structured observation capture.
+- Deterministic RED/YELLOW safety screening alongside the conversational workflow.
+- Clinician triage, longitudinal patient context, clinical report generation and clinician attestation.
+- Patient-authorized caregiver access with granular scopes, audit events and revocation.
+- MongoDB-backed persistence and Redis/BullMQ background jobs for escalations, reminders, reports and notifications.
+- Operational health endpoints, metrics and queue administration.
+
+Implemented capabilities and external deployment authorization are separate questions. Consult the project documentation and current release matrix before relying on any feature in a live setting.
+
+## Technology stack
+
+The following technologies are reflected in the current root/server/client package manifests and inspected source:
+
+| Layer | Technologies |
+|---|---|
+| Frontend | React 18, Vite, React Router, Tailwind CSS, Recharts, Axios |
+| Real-time client | Socket.IO client, Web Audio API / AudioWorklet |
+| Backend | Node.js (ES modules), Express 4, Socket.IO |
+| Data | MongoDB, Mongoose |
+| Authentication and validation | JWT, bcryptjs, Zod |
+| Voice and AI integrations | AssemblyAI, Google Generative AI (Gemini), ElevenLabs |
+| Notifications | Twilio, Resend |
+| Background processing | BullMQ, Redis via ioredis |
+| Operations | Docker, Docker Compose, Prometheus-style metrics |
+
+Package presence does not prove a provider credential is valid, a production integration is enabled, or a provider is contractually approved to process PHI.
+
+## Repository structure
 
 ```text
-                                  +---------------------------------------+
-                                  |    55+ Senior Patient Interface       |
-                                  | (React + Web Audio API + Speech-to-Text)|
-                                  +-------------------+-------------------+
-                                                      |
-                                          WebSocket / API Stream
-                                                      |
-                                                      v
-                                  +-------------------+-------------------+
-                                  |    Node.js Express + Socket.io Server  |
-                                  |         (Voice Session Engine)        |
-                                  +---------+-------------------+---------+
-                                            |                   |
-            +-------------------------------+                   +-------------------------------+
-            |                                                                                   |
-            v                                                                                   v
-+-----------+-----------+                                                           +-----------+-----------+
-| Deepgram Nova-2 STT  |                                                           | ElevenLabs Turbo v2.5 TTS|
-| (Streaming Speech Text)|                                                          | (Audio Chunk Synthesis)  |
-+-----------+-----------+                                                           +-----------+-----------+
-            |                                                                                   ^
-            v                                                                                   |
-+-----------+-----------------------------------------------------------------------------------+-----------+
-|                              Conversational LLM Engine (GPT-4o / Claude)                                  |
-|         + Tool Calling (logCheckin, recordConcern, flagConcern) + Keyword Safety Net                      |
-+-----------+-----------------------------------------------------------------------------------------------+
-                                                      |
-                                        Ground-Truth Data Persistence
-                                                      v
-                                  +-------------------+-------------------+
-                                  |   MongoDB Atlas Database Storage      |
-                                  | (Patients, Checkins, Flags, Reports)  |
-                                  +-------------------+-------------------+
-                                                      |
-                                            REST API & Escalations
-                                                      |
-                    +---------------------------------+---------------------------------+
-                    |                                                                   |
-                    v                                                                   v
-+-------------------+-------------------+                             +-----------------+-----------------+
-|   Clinician Web Portal & Dashboard    |                             |  Twilio SMS & Nodemailer Email  |
-|  (Report Summaries, Flags, Recharts)  |                             |  (Real-Time Red Alert Dispatch) |
-+---------------------------------------+                             +---------------------------------+
+Companio/
+├── client/                 # React + Vite application
+├── server/                 # Express, Socket.IO, models, services and workers
+├── docs/                   # Product, architecture, API, clinical, privacy and phase docs
+├── UI/                     # UI assets and/or design references (inspect before use)
+├── Dockerfile.client
+├── Dockerfile.server
+├── docker-compose.yml
+├── .env.example             # Placeholder configuration; never store live credentials here
+├── package.json             # Monorepo scripts
+├── start-demo.bat
+├── start-demo.sh
+├── README.md
+├── AI_AGENTS.md
+├── CONTRIBUTING.md
+└── SECURITY.md
 ```
 
-### Architecture Description
-1. **Voice Input & Capture**: The client records audio using the Web Audio API with a 250ms streaming timeslice, streaming binary chunks over a dedicated Socket.io `/voice` namespace.
-2. **Speech-to-Text (STT)**: Deepgram Nova-2 processes the live audio stream with custom silence endpointing thresholds (900ms) tuned for older adults. Interim and final transcripts are emitted back in real time.
-3. **Conversational Engine & Parallel Safety Net**: Final transcripts are evaluated simultaneously by:
-   - **LLM Agent**: Maintains conversational history and executes clinical function calls (`logCheckin`, `recordConcern`, `flagConcern`).
-   - **Keyword Safety Net**: Runs independently via regex pattern matching to ensure critical red flags (e.g., chest pain, severe breathlessness, stroke signs) are caught instantly without relying solely on LLM completion.
-4. **Text-to-Speech (TTS)**: Response text is synthesized into natural senior-tuned voice audio using ElevenLabs Rachel preset (`eleven_turbo_v2_5`) and streamed as binary MP3 chunks.
-5. **Trends & Report Generator**: Computes ground-truth clinical trends deterministically in plain JavaScript before passing metrics to the LLM for clinical narration.
-6. **Clinician Portal & Escalation**: Red flags trigger automatic Mongoose post-save hooks dispatching SMS (Twilio) and Email (Nodemailer/SendGrid) alerts to clinicians while rendering interactive dashboards with Recharts time-series visualization.
+Start with the [documentation index](docs/README.md) and [documentation index catalogue](docs/DOCUMENTATION_INDEX.md).
 
----
+## Prerequisites
 
-## ⚡ Quick Start (Demo Launcher)
+For the documented deployment baseline, use:
+- Node.js 20.x or 22.x LTS.
+- npm.
+- MongoDB (local instance or an approved managed environment).
+- Redis for BullMQ-backed distributed jobs.
+- Docker and Docker Compose if using the container configuration.
 
-The fastest way to launch Companio locally is using the cold-start demo launcher.
+Provider API credentials are optional for some local paths but are required for the corresponding live provider integrations. Do not use real patient information with a provider unless the exact service and configuration have been reviewed and approved for that use.
 
-### Prerequisites
-- **Node.js**: v18.x or higher
-- **MongoDB**: Local MongoDB instance (`mongodb://localhost:27017/companio`) OR MongoDB Atlas Cloud Connection String.
+## Local development setup
 
-### Windows Cold Start
-Double-click `start-demo.bat` or run:
-```cmd
-start-demo.bat
-```
+### 1. Install dependencies
 
-### Linux / macOS Cold Start
+From the repository root:
+
 ```bash
-chmod +x start-demo.sh
-./start-demo.sh
+npm run install:all
 ```
 
-The start script will:
-1. Verify required environment variables in `.env`.
-2. Seed the database with 10 days of synthetic patient check-ins and clinical flags.
-3. Launch the Express server (`http://localhost:5000`) and Vite React client (`http://localhost:5173`) concurrently.
-4. Display pre-filled credentials for instant demo access.
+### 2. Configure local environment
 
----
+Use the tracked template as a starting point:
 
-## 🔑 Pre-filled Demo Credentials
-
-| Role | Email | Password | Features / Focus |
-|---|---|---|---|
-| **Clinician** | `sjenkins@healthclinic.org` | `password123` | Dashboard, Flag Review, Recharts Trends, Report Generation |
-| **Patient** | `robert.miller@example.com` | `password123` | Senior Voice UI, Mic Centerpiece, Live Captions, End Screen |
-| **Patient** | `eleanor.vance@example.com` | `password123` | Arthritis & Hypertension Check-ins |
-| **Patient** | `arthur.p@example.com` | `password123` | Daily Diabetes Wellness Checks |
-
----
-
-## 🌐 MongoDB Atlas (Cloud) Configuration
-
-To connect Companio to a cloud MongoDB Atlas cluster:
-1. Create a cluster on [MongoDB Atlas](https://www.mongodb.com/cloud/atlas).
-2. Create a Database User with read/write permissions.
-3. Add IP `0.0.0.0/0` (or your static IP) to the Atlas Network Access whitelist.
-4. Update `MONGODB_URI` in `.env`:
-   ```env
-   MONGODB_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/companio?retryWrites=true&w=majority
-   ```
-
----
-
-## 🐳 Docker Deployment Guide
-
-Companio is containerized for seamless multi-platform container orchestration.
-
-### 1. Configure `.env`
-Ensure `.env` in root contains your `MONGODB_URI` and API keys.
-
-### 2. Build & Launch with Docker Compose
 ```bash
-docker-compose up --build -d
+cp .env.example .env
 ```
 
-- **Client App (Nginx SPA)**: `http://localhost:5173` (or `http://localhost:80`)
-- **Backend API**: `http://localhost:5000`
+On Windows PowerShell:
 
-### 3. Stop Containers
+```powershell
+Copy-Item .env.example .env
+```
+
+Then:
+- Replace any development JWT secret with a newly generated, high-entropy local secret.
+- Keep `AUDIO_RETENTION_MODE=disabled` unless a separately approved retention design and authorization exist.
+- Configure only the provider credentials needed for the local synthetic-data workflow.
+- Do not commit `.env`, API keys, tokens or certificates.
+- Verify actual runtime requirements in [CONFIGURATION.md](docs/CONFIGURATION.md) and `server/src/config/envValidator.js`. Some old variables in the template may be compatibility leftovers; source configuration is authoritative.
+
+### 3. Start MongoDB and Redis
+
+Start local MongoDB and Redis services using your local development setup, or inspect the repository's `docker-compose.yml` before using it. The Compose file sets `NODE_ENV=production` for its application services and contains fallback values that must not be used as production secrets. Treat the Compose topology as an evaluation/development aid unless it has been separately hardened and approved.
+
+### 4. Start the application
+
+From the repository root:
+
 ```bash
-docker-compose down
+npm run dev
 ```
 
----
+The root script starts server and client processes concurrently. The checked-in launcher scripts `start-demo.bat` and `start-demo.sh` still contain legacy provider checks and static demo credential output; inspect and update them before relying on them. Do not use credentials printed by old launcher scripts outside an isolated local synthetic demo.
 
-## 🎭 Step-by-Step Demo Walkthrough Script
+Common local addresses recorded by the project:
+- Vite client: `http://localhost:5173`
+- Express API: `http://localhost:5000`
 
-Follow this script to showcase all end-to-end features of Companio during a presentation or demo:
+Actual ports depend on local environment configuration.
 
-1. **Clinician Overview**:
-   - Navigate to `http://localhost:5173/login`.
-   - Log in as **Dr. Sarah Jenkins** (`sjenkins@healthclinic.org` / `password123`).
-   - Highlight the patient list: point out how **Robert Miller** is automatically sorted to the top due to 7 open red flags.
-2. **Patient Detail Inspection**:
-   - Click into **Robert Miller** (`/clinician/patient/...`).
-   - Review the generated **Clinical Overview Summary**, **🔴 Red Flags** (noting the chest tightness alert), **Recharts Time-Series Charts** (Adherence %, Sleep, Activity, Hydration), and **Follow-up Action Checklist**.
-3. **Patient Voice Check-in**:
-   - Open an Incognito window and navigate to `http://localhost:5173/login`.
-   - Log in as patient **Robert Miller** (`robert.miller@example.com` / `password123`).
-   - Observe the senior-friendly home screen ("Good evening, Robert! 👋").
-   - Click the giant green **"Start Check-in"** button to enter `/patient/voice-checkin`.
-   - Speak or test the voice check-in mentioning mild knee stiffness. Observe the live captions and centerpiece state changes.
-   - Run a second check-in or test mentioning *"I have chest pain and trouble breathing"*.
-   - Click **"End Check-in"**. Note the gentle, reassuring completion message on `/patient/checkin-complete`.
-4. **Clinician Escalation & Report Regeneration**:
-   - Switch back to Dr. Sarah Jenkins' clinician tab.
-   - Click **"Regenerate Report"**. Observe the updated clinical overview reflecting the new check-in.
-   - Mark a flag as **"Reviewed"** and refresh the page to demonstrate state persistence.
+## Useful commands
 
----
+Run from the repository root:
 
-## ⚙️ Environment Variables Summary (`.env.example`)
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Start frontend and backend in development |
+| `npm run dev:server` | Start backend only |
+| `npm run dev:client` | Start frontend only |
+| `npm run seed` | Run server seeder |
+| `npm run build:client` | Build the Vite client |
+| `npm run test:voice` | Voice gateway tests |
+| `npm run test:safety` | Clinical safety tests |
+| `npm run test:dialogue` | Dialogue tests |
+| `npm run test:reporting` | Reporting and attestation tests |
+| `npm run test:caregivers` | Caregiver tests |
+| `npm run test:jobs` | Background job tests |
+| `npm run test:redis` | Real Redis verification (requires a running Redis service) |
+| `npm run test:operations` | Operational and release-gate tests |
+| `npm run test:drill` | Backup/restore drill (use isolated test data and services) |
+| `npm run test:recovery` | Password recovery tests |
+| `npm run test:pilot` | Synthetic end-to-end pilot tests |
+| `npm run test:deid` | Pilot-safe de-identification tests |
+| `npm run check:contrast` | Frontend color-contrast check |
 
-```env
-# Server
-PORT=5000
-NODE_ENV=development
-APP_BASE_URL=http://localhost:5173
+Run tests with synthetic fixtures and isolated test services. A command's existence does not mean the test was run in your environment. Record exact results and distinguish mocked tests from real infrastructure tests.
 
-# Database
-MONGODB_URI=mongodb://localhost:27017/companio
+## API and voice architecture
 
-# Authentication
-JWT_SECRET=super_secret_companio_jwt_token_key_2026
+The backend centralizes route registration in `server/src/routes/index.js`. The registry documents versioned `/api/v1` routes and a backward-compatible `/api` alias. Voice interaction uses the Socket.IO gateway and the voice lifecycle components documented under [docs/](docs/README.md).
 
-# Speech-to-Text (AssemblyAI Streaming WebSocket)
-ASSEMBLYAI_API_KEY=your_assemblyai_api_key_here
+See:
+- [Architecture](docs/ARCHITECTURE.md)
+- [API reference](docs/API_REFERENCE.md)
+- [Voice session state machine](docs/VOICE_SESSION_STATE_MACHINE.md)
+- [Clinical safety architecture](docs/CLINICAL_SAFETY_ARCHITECTURE.md)
+- [Caregiver architecture](docs/CAREGIVER_PORTAL_ARCHITECTURE.md)
 
-# Conversational LLM & Report Narration (Gemini 3.8 Flash)
-GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-3.8-flash
+## Privacy, security and clinical limitations
 
-# Text-to-Speech (ElevenLabs Turbo v2.5 Rachel Preset)
-ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
-ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM
+- Use synthetic data for development and automated testing.
+- Do not transmit real PHI to a provider unless the exact service, account configuration, contract and applicable legal requirements have been reviewed and approved.
+- The current alert data scrubber is a heuristic data-minimization and pseudonymization layer. It is not a claim of independently certified HIPAA Safe Harbor or Expert Determination.
+- Consent must be checked before applicable voice processing.
+- Caregiver permissions must be enforced server-side and do not arise automatically from an emergency-contact relationship.
+- Clinical flags must remain durable when notification delivery fails.
+- Clinical reports require clinician review/attestation.
+- Never treat software test results as clinical, legal, ethics or regulatory approval.
 
-# Clinical Escalation Alerts (SMS & Email)
-ENABLE_SMS_ESCALATION=false
-ENABLE_EMAIL_ESCALATION=false
+See [Security](SECURITY.md), [AI agent rules](AI_AGENTS.md), [privacy architecture](docs/CONSENT_AND_PRIVACY_ARCHITECTURE.md), [provider closure register](docs/PHASE_12_2_PROVIDER_CLOSURE.md) and [production readiness matrix](docs/PHASE_12_PRODUCTION_READINESS_MATRIX.md).
 
-# Twilio SMS Credentials
-TWILIO_ACCOUNT_SID=your_twilio_sid
-TWILIO_AUTH_TOKEN=your_twilio_token
-TWILIO_PHONE_NUMBER=+1234567890
+## Deployment
 
-# Resend Email Credentials
-RESEND_API_KEY=re_your_resend_api_key_here
+The repository includes `Dockerfile.server`, `Dockerfile.client` and `docker-compose.yml`. Read [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) and [docs/CONFIGURATION.md](docs/CONFIGURATION.md) before launching containers.
 
-# Clinician Routing Contacts
-CLINICIAN_PHONE_NUMBER=+15550192834
-CLINICIAN_NOTIFICATION_EMAIL=sjenkins@healthclinic.org
-```
+**Commercial production and live-patient deployment are not authorized by this README.** The current repository readiness documents record open external provider, independent security, clinical governance and ethics prerequisites. Use the four-tier readiness matrix for the current decision.
 
----
+## Contributing and security
 
-## 📌 Architectural Milestones & Changelog
+- Contribution process: [CONTRIBUTING.md](CONTRIBUTING.md)
+- AI coding rules: [AI_AGENTS.md](AI_AGENTS.md)
+- Security policy: [SECURITY.md](SECURITY.md)
+- Full docs: [docs/README.md](docs/README.md)
 
-For a full historical record of releases, see [CHANGELOG.md](file:///c:/WEB%20DEVELOPMENT/Companio/CHANGELOG.md).
+## License
 
-- **Recent Upgrades (Today)**: Stage 1–4 senior architecture upgrades (`939d39d`), Twilio alias support (`4599285`), Gemini 3.8 Flash failover (`ffcb273`), AssemblyAI STT migration (`9b766ad`).
-- **Phases 10–13**: Docker containerization (`a1b2c3d`), email/SMS escalations via Mongoose hooks (`e8f9a0b`), senior-friendly patient voice UI (`c4d5e6f`), clinician triage portal with Recharts (`b2c3d4e`).
-- **Phases 6–9**: Deterministic JS report math with template fail-safe (`f1a2b3c`), ElevenLabs streaming TTS (`d9e8f7a`), keyword safety net with atomic deduplication (`c7d8e9f`), Gemini conversational agent (`a5b6c7d`).
-- **Phases 1–5**: Real-time STT streaming (`e1f2a3b`), authenticated `/voice` socket lifecycle (`d1c2b3a`), stateless JWT auth & RBAC (`b8a9c0d`), Mongoose domain models & seeder (`a4b5c6d`), monorepo scaffold (`8f9e0d1`).
-
----
-
-## ⚠️ Known Limitations & Future Enhancements
-
-- **Voice Browser Audio Unlocking**: Modern web browsers require an initial user click gesture before permitting Web Audio API playback.
-- **Microphone Permissions**: WebRTC audio streaming requires explicit user microphone permission in the browser address bar.
-- **Future Clinical Roadmap**: Support for multi-lingual senior dialects (Spanish, Mandarin), hardware smart-watch integration for live pulse-oximetry data, and EMR (Epic / Cerner FHIR) interoperability.
-
----
-
-## 📜 License & Acknowledgments
-
-Built with Node.js, Express, Socket.io, React, Vite, Tailwind CSS, Recharts, Deepgram, ElevenLabs, OpenAI, and MongoDB.
+No repository license file or owner-approved license selection was verified during this documentation update. Do not assume a license based solely on package metadata; add a root `LICENSE` only after the repository owner explicitly selects one.
