@@ -24,6 +24,7 @@
  */
 
 export const ORB_STATES = {
+  IDLE: 'idle',
   CONNECTING: 'connecting',
   CONSENT: 'consent',
   MIC_NEEDED: 'micNeeded',
@@ -46,6 +47,7 @@ export const ORB_STATES = {
  * Categorization of states into Backend-driven vs UI-only
  */
 export const STATE_PROVENANCE = {
+  idle: 'UI_ONLY',
   connecting: 'BACKEND_SIGNAL',
   consent: 'BACKEND_SIGNAL',
   micNeeded: 'UI_ONLY',
@@ -68,6 +70,7 @@ export const STATE_PROVENANCE = {
  * Standard accessible copy for each state according to Companio clinical safety requirements.
  */
 export const STATE_COPY = {
+  idle: "Ready when you are. Tap Start Check-in to turn on your microphone.",
   connecting: 'Connecting to your health companion...',
   consent: 'Checking healthcare consent...',
   micNeeded: 'Microphone access needed. Please tap Allow when prompted.',
@@ -137,4 +140,46 @@ export function mapBackendToOrbState(backendState) {
       return ORB_STATES.LISTENING;
   }
 }
+
+/**
+ * Maps Companio's 16+ clinical voice states into Orbloom's 6 valid OrbState values:
+ * "idle" | "listening" | "thinking" | "speaking" | "success" | "error"
+ *
+ * @param {string} orbState
+ * @returns {'idle' | 'listening' | 'thinking' | 'speaking' | 'success' | 'error'}
+ */
+export function mapCompanioToOrbloomState(orbState) {
+  switch (orbState) {
+    case ORB_STATES.LISTENING:
+    case ORB_STATES.BARGE_IN:
+    case ORB_STATES.UNCERTAIN:
+      return 'listening';
+
+    case ORB_STATES.CONNECTING:
+    case ORB_STATES.PROCESSING:
+    case ORB_STATES.THINKING:
+    case ORB_STATES.RECONNECTING:
+    case ORB_STATES.RECOVERING:
+      return 'thinking';
+
+    case ORB_STATES.SPEAKING:
+      return 'speaking';
+
+    case ORB_STATES.COMPLETED:
+      return 'success';
+
+    case ORB_STATES.URGENT:
+    case ORB_STATES.FAILED:
+      return 'error';
+
+    case ORB_STATES.IDLE:
+    case ORB_STATES.CONSENT:
+    case ORB_STATES.MIC_NEEDED:
+    case ORB_STATES.PAUSED:
+    case ORB_STATES.READ_BACK:
+    default:
+      return 'idle';
+  }
+}
+
 

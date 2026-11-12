@@ -41,8 +41,8 @@ export default function DesignSystemShowcase() {
   const [inputValue, setInputValue] = useState('');
   const [selectValue, setSelectValue] = useState('active');
 
-  // VoiceOrb interactive showcase state
-  const [showcaseOrbState, setShowcaseOrbState] = useState(ORB_STATES.LISTENING);
+  // VoiceOrb interactive showcase state (always opens in neutral `idle` state)
+  const [showcaseOrbState, setShowcaseOrbState] = useState(ORB_STATES.IDLE);
   const [simulatedAudioLevel, setSimulatedAudioLevel] = useState(0.25);
   const [orbReducedMotion, setOrbReducedMotion] = useState(false);
 
@@ -112,25 +112,25 @@ export default function DesignSystemShowcase() {
           </div>
         </section>
 
-        {/* Section 2: Living Fluid VoiceOrb (16 States & Real Spring Dynamics) */}
+        {/* Section 2: Orbloom WebGL VoiceOrb (Semantic States & Nebula Palette) */}
         <section className="space-y-4">
           <div className="border-b border-border pb-2">
-            <h2 className="text-xl font-bold text-text-strong">2. Living Fluid VoiceOrb (16 States)</h2>
+            <h2 className="text-xl font-bold text-text-strong">2. Orbloom WebGL VoiceOrb ({Object.keys(ORB_STATES).length} Clinical States)</h2>
             <p className="text-sm text-text-muted">
-              Constructed only from Bloom tokens (Blue #226192, Light Blue #7FB0D8, Coral #EF8557).
-              Features real spring scaling, calm idle breathing, and 16 distinct clinical states.
+              Powered by orbloom@0.1.0 (nebula-violet-01 archetype over a deep OKLCH stage), calibrated voice-reactive displacement, WebGL fallback, and user reduced-motion respect.
             </p>
           </div>
 
           <div className="bg-surface border border-border rounded-card p-6 shadow-soft-lift space-y-6">
             <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
               {/* VoiceOrb Visual Container */}
-              <div className="flex flex-col items-center justify-center p-6 rounded-card bg-surface-sunken/60 border border-border w-full lg:w-96 shrink-0">
+              <div className="flex flex-col items-center justify-center p-4 rounded-card bg-surface-sunken/60 border border-border w-full lg:w-[360px] shrink-0">
                 <VoiceOrb
                   state={showcaseOrbState}
                   level={simulatedAudioLevel}
-                  size={200}
-                  reducedMotion={orbReducedMotion}
+                  size={264}
+                  quality="balanced"
+                  reducedMotion={orbReducedMotion ? true : 'user'}
                 />
 
                 <div aria-live="polite" className="mt-4 text-center">
@@ -138,7 +138,7 @@ export default function DesignSystemShowcase() {
                     Active State: {showcaseOrbState}
                   </span>
                   <p className="text-sm font-semibold text-text-strong mt-1">
-                    "{STATE_COPY[showcaseOrbState] || STATE_COPY.listening}"
+                    "{STATE_COPY[showcaseOrbState] || STATE_COPY.idle}"
                   </p>
                 </div>
               </div>

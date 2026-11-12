@@ -1,0 +1,73 @@
+/* Atmospheric OKLCH stage & responsive wrapper for Companio's Orbloom voice orb */
+
+.companio-orb-stage {
+  --orb-stage-ground: oklch(0.19 0.055 308);
+  --orb-stage-cool: oklch(0.12 0.045 275);
+  --orb-stage-edge: oklch(0.055 0.015 280);
+  --orb-stage-key: oklch(0.66 0.24 301 / 0.24);
+  --orb-stage-aurora: oklch(0.68 0.26 335 / 0.1);
+  --orb-stage-counter: oklch(0.66 0.18 265 / 0.11);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 1.25rem;
+  overflow: hidden;
+  border-radius: 1.5rem;
+  background-color: #1c0a2b;
+  background-image:
+    radial-gradient(64% 52% at 28% 24%, var(--orb-stage-key) 0%, transparent 72%),
+    linear-gradient(132deg, transparent 24%, var(--orb-stage-aurora) 48%, transparent 72%),
+    radial-gradient(52% 48% at 78% 80%, var(--orb-stage-counter) 0%, transparent 74%),
+    radial-gradient(
+      95% 88% at 50% 48%,
+      var(--orb-stage-ground) 0%,
+      var(--orb-stage-cool) 58%,
+      var(--orb-stage-edge) 100%
+    );
+  box-shadow: inset 0 0 0 1px oklch(0.72 0.12 300 / 0.16);
+}
+
+.companio-orb-stage--compact {
+  padding: 1rem;
+}
+
+.companio-orb-stage-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.045;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
+
+.companio-orb-frame {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+}
+
+/* Responsive safeguard while honoring default --orb-diameter: 264px */
+.companio-orb-stage .orb-motion {
+  max-width: 100%;
+  aspect-ratio: 1 / 1;
+}
+
+/* Match the WebGL-unavailable fallback gradient to the nebula-violet palette */
+.companio-orb-stage .orb-fallback,
+.orb-motion .orb-fallback {
+  background:
+    radial-gradient(circle at 60% 38%, rgba(255, 255, 255, 0.78) 0 1px, transparent 4px),
+    radial-gradient(circle at 38% 58%, rgba(162, 77, 255, 0.55) 0 1.5px, transparent 28%),
+    radial-gradient(ellipse at 34% 34%, rgba(162, 77, 255, 0.52), transparent 55%),
+    radial-gradient(ellipse at 68% 64%, rgba(255, 77, 216, 0.36), transparent 52%),
+    radial-gradient(ellipse at 66% 32%, rgba(110, 139, 255, 0.35), transparent 50%),
+    radial-gradient(circle, #08040d 0%, #1c0a2b 68%, rgba(162, 77, 255, 0.48) 97%, transparent 100%);
+}

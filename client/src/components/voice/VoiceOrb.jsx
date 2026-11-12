@@ -1,275 +1,258 @@
-import React, { useEffect, useRef } from 'react';
-import { ORB_STATES } from './voiceStateAdapter';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import 'orbloom/styles.css';
+import './VoiceOrb.css';
+import { COMPANIO_ORB_THEME } from './orbTheme';
 import {
-  Mic,
-  Brain,
-  Volume2,
-  AlertTriangle,
-  CheckCircle2,
-  Pause,
-  RefreshCw,
-  AlertCircle,
-  HelpCircle,
-} from 'lucide-react';
+  ORB_STATES,
+  STATE_COPY,
+  mapCompanioToOrbloomState,
+} from './voiceStateAdapter';
+
+const DEFAULT_ORB_DIAMETER = 264;
 
 /**
- * Companio VoiceOrb Component
- * 
- * Living, fluid acoustic orb constructed exclusively from Companio's Bloom tokens:
- * - Blue: rgb(34, 97, 146) [#226192]
- * - Light Blue: rgb(127, 176, 216) [#7FB0D8]
- * - Coral: rgb(239, 133, 87) [#EF8557]
- * 
- * Features:
- * - Smooth spring physics on scale driven by REAL audio input/output level
- * - Calm breathing when silent (NO fake waveforms)
- * - 60fps Canvas render loop decoupling audio level from React state
- * - Strict reduced-motion fallback (static visual orb + accessible icon)
- * 
- * @param {string} state - One of ORB_STATES
- * @param {number | React.RefObject<number> | Function} level - Real RMS audio level in [0, 1]
- * @param {number} size - Pixel dimensions (Default 220px)
- * @param {boolean} reducedMotion - Accessibility reduced motion flag
+ * Companio VoiceOrb Component (backed by orbloom@0.1.0 WebGL engine)
+ *
+ * Wraps Orbloom's single-canvas fullscreen shader with:
+ * - Module-scope resolved nebula-violet theme (`COMPANIO_ORB_THEME`)
+ * - SSR-safe client-only dynamic import & single `OrbController` instance per canvas
+ * - Non-recreating prop synchronization via `setState` / `setTheme` / `setQuality` / `setReducedMotion`
+ * - Exact `theme.ambientMotion` CSS custom properties onto `.orb-motion`
+ * - Deep OKLCH atmospheric stage derived from `#1c0a2b` with responsive `ResizeObserver`
+ * - `.orb-no-webgl` fallback activation on WebGL context failure
+ * - Mandatory accessible `aria-live="polite"` text status alongside visual state
  */
 export default function VoiceOrb({
-  state = ORB_STATES.LISTENING,
+  state = ORB_STATES.IDLE,
   level = 0,
-  size = 220,
-  reducedMotion = false,
+  size = DEFAULT_ORB_DIAMETER,
+  quality = 'balanced',
+  reducedMotion = 'user',
+  theme = COMPANIO_ORB_THEME,
+  staged = true,
+  statusLabel = null,
   className = '',
 }) {
+  const stageRef = useRef(null);
+  const motionRef = useRef(null);
   const canvasRef = useRef(null);
-  const animFrameRef = useRef(null);
-  const springRef = useRef({
-    scale: 1.0,
-    velocity: 0,
-    time: 0,
-    bargeInStartTime: 0,
-  });
+  const controllerRef = useRef(null);
+  const levelRafRef = useRef(null);
+  const levelSourceRef = useRef(level);
 
-  // Extract instantaneous audio level (handles number, ref, or getter function)
-  const getInstantLevel = () => {
-    if (typeof level === 'function') return Math.min(1, Math.max(0, level()));
-    if (level && typeof level === 'object' && 'current' in level) {
-      return Math.min(1, Math.max(0, level.current || 0));
-    }
-    if (typeof level === 'number') return Math.min(1, Math.max(0, level));
-    return 0;
-  };
+  const [webglFailed, setWebglFailed] = useState(false);
+  const [effectiveDiameter, setEffectiveDiameter] = useState(size);
 
+  const resolvedTheme = theme || COMPANIO_ORB_THEME;
+  const orbloomState = mapCompanioToOrbloomState(state);
+  const accessibleStatusText = statusLabel || STATE_COPY[state] || STATE_COPY.idle;
+
+  levelSourceRef.current = level;
+
+  const getInstantLevel = useCallback(() => {
+    const src = levelSourceRef.current;
+    let raw = 0;
+    if (typeof src === 'function') raw = src();
+    else if (src && typeof src === 'object' && 'current' in src) raw = src.current || 0;
+    else if (typeof src === 'number') raw = src;
+    return Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0;
+  }, []);
+
+  // Sync per-variant ambient float CSS properties & responsive diameter onto `.orb-motion`
+  const applyAmbientMotion = useCallback((el, activeTheme, motionSetting) => {
+    if (!el || !activeTheme?.ambientMotion) return;
+    const m = activeTheme.ambientMotion;
+    const enabled = motionSetting === true ? false : m.enabled;
+    el.dataset.ambientMotion = String(enabled);
+    el.style.setProperty('--orb-motion-distance', `${-m.verticalTravel}px`);
+    el.style.setProperty('--orb-motion-scale', String(m.scale));
+    el.style.setProperty('--orb-motion-duration', `${m.durationSeconds}s`);
+    el.style.setProperty('--orb-motion-delay', `${m.delaySeconds}s`);
+  }, []);
+
+  // Recompute responsive diameter from container bounds while respecting requested size (default 264px)
   useEffect(() => {
-    if (reducedMotion) {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      return;
+    const stageEl = stageRef.current;
+    if (!stageEl || typeof ResizeObserver !== 'function') {
+      setEffectiveDiameter(size);
+      return undefined;
     }
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Handle high-DPI crisp rendering
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = size * dpr;
-    canvas.height = size * dpr;
-    ctx.scale(dpr, dpr);
-
-    const center = size / 2;
-    const baseRadius = size * 0.35;
-
-    let isRunning = true;
-
-    const render = () => {
-      if (!isRunning) return;
-
-      const rawLevel = getInstantLevel();
-      const s = springRef.current;
-      s.time += 0.02;
-
-      // 1. Spring Physics calculation for scale
-      let targetScale = 1.0;
-
-      if (state === ORB_STATES.LISTENING) {
-        // Natural gentle breathing when idle + reactive displacement on real voice
-        const breathing = Math.sin(s.time * 1.5) * 0.035;
-        targetScale = 1.0 + breathing + rawLevel * 0.45;
-      } else if (state === ORB_STATES.SPEAKING) {
-        // Voice response expansion + rhythmic pulse + real playback amplitude
-        const pulse = Math.sin(s.time * 2.8) * 0.04;
-        targetScale = 1.05 + pulse + rawLevel * 0.55;
-      } else if (state === ORB_STATES.THINKING || state === ORB_STATES.PROCESSING) {
-        // Contracting amber / thinking focus
-        targetScale = 0.94 + Math.sin(s.time * 3.5) * 0.03;
-      } else if (state === ORB_STATES.BARGE_IN) {
-        // Rapid snap contraction under 150ms
-        targetScale = 0.88;
-      } else if (state === ORB_STATES.PAUSED) {
-        targetScale = 0.95;
-      } else if (state === ORB_STATES.RECONNECTING || state === ORB_STATES.RECOVERING) {
-        // Alert pulsing perimeter
-        targetScale = 1.0 + Math.sin(s.time * 4.0) * 0.05;
-      } else if (state === ORB_STATES.URGENT) {
-        targetScale = 1.04; // Steady, never flashing
-      } else if (state === ORB_STATES.COMPLETED) {
-        targetScale = 1.08;
+    const updateSize = () => {
+      const bounds = stageEl.getBoundingClientRect();
+      if (!bounds.width) {
+        setEffectiveDiameter(size);
+        return;
       }
-
-      // Spring Euler integration (Stiffness = 0.22, Damping = 0.76)
-      const stiffness = state === ORB_STATES.BARGE_IN ? 0.45 : 0.22;
-      const damping = state === ORB_STATES.BARGE_IN ? 0.65 : 0.78;
-      const force = (targetScale - s.scale) * stiffness;
-      s.velocity = (s.velocity + force) * damping;
-      s.scale += s.velocity;
-
-      // Clear Canvas
-      ctx.clearRect(0, 0, size, size);
-
-      ctx.save();
-      ctx.translate(center, center);
-      ctx.scale(s.scale, s.scale);
-
-      // Bloom Brand Palette Colors
-      const blue = 'rgba(34, 97, 146, ';
-      const lightBlue = 'rgba(127, 176, 216, ';
-      const coral = 'rgba(239, 133, 87, ';
-      const urgentSteady = 'rgba(179, 38, 30, ';
-
-      // 2. Outer Glow Ring
-      const glowGrad = ctx.createRadialGradient(0, 0, baseRadius * 0.6, 0, 0, baseRadius * 1.45);
-      if (state === ORB_STATES.SPEAKING) {
-        // Coral glow expands during active Companio speech
-        glowGrad.addColorStop(0, coral + '0.45)');
-        glowGrad.addColorStop(0.7, blue + '0.25)');
-        glowGrad.addColorStop(1, coral + '0)');
-      } else if (state === ORB_STATES.RECONNECTING || state === ORB_STATES.RECOVERING) {
-        // Distinct Coral perimeter ring
-        glowGrad.addColorStop(0, coral + '0.5)');
-        glowGrad.addColorStop(0.85, coral + '0.35)');
-        glowGrad.addColorStop(1, coral + '0)');
-      } else if (state === ORB_STATES.URGENT) {
-        // Steady non-flashing clinical priority aura
-        glowGrad.addColorStop(0, urgentSteady + '0.4)');
-        glowGrad.addColorStop(0.8, urgentSteady + '0.2)');
-        glowGrad.addColorStop(1, urgentSteady + '0)');
-      } else {
-        // Calm clinical blue outer glow
-        glowGrad.addColorStop(0, lightBlue + '0.4)');
-        glowGrad.addColorStop(0.65, blue + '0.2)');
-        glowGrad.addColorStop(1, lightBlue + '0)');
+      const styles = getComputedStyle(stageEl);
+      const padX = (parseFloat(styles.paddingLeft) || 0) + (parseFloat(styles.paddingRight) || 0);
+      const available = Math.max(120, Math.floor(bounds.width - padX));
+      const nextDiameter = Math.min(size, available);
+      setEffectiveDiameter(nextDiameter);
+      if (controllerRef.current && !controllerRef.current.destroyed) {
+        controllerRef.current.resize();
       }
-
-      ctx.fillStyle = glowGrad;
-      ctx.beginPath();
-      ctx.arc(0, 0, baseRadius * 1.45, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 3. Fluid Drifting Gradient Lobes (ChatGPT / Gemini style)
-      ctx.globalCompositeOperation = 'screen';
-
-      const rotSpeed = state === ORB_STATES.THINKING ? 2.5 : 1.0;
-
-      // Lobe 1: Blue Core Anchor
-      const a1 = s.time * 0.8 * rotSpeed;
-      const x1 = Math.cos(a1) * (baseRadius * 0.22);
-      const y1 = Math.sin(a1) * (baseRadius * 0.22);
-      const r1Grad = ctx.createRadialGradient(x1, y1, 0, x1, y1, baseRadius * 0.95);
-      r1Grad.addColorStop(0, blue + '0.85)');
-      r1Grad.addColorStop(0.7, blue + '0.4)');
-      r1Grad.addColorStop(1, blue + '0)');
-      ctx.fillStyle = r1Grad;
-      ctx.beginPath();
-      ctx.arc(x1, y1, baseRadius * 0.95, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Lobe 2: Light Blue Ethereal Swirl
-      const a2 = -s.time * 0.95 * rotSpeed + 2.1;
-      const x2 = Math.cos(a2) * (baseRadius * 0.28);
-      const y2 = Math.sin(a2) * (baseRadius * 0.28);
-      const r2Grad = ctx.createRadialGradient(x2, y2, 0, x2, y2, baseRadius * 0.85);
-      r2Grad.addColorStop(0, lightBlue + '0.9)');
-      r2Grad.addColorStop(0.6, lightBlue + '0.35)');
-      r2Grad.addColorStop(1, lightBlue + '0)');
-      ctx.fillStyle = r2Grad;
-      ctx.beginPath();
-      ctx.arc(x2, y2, baseRadius * 0.85, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Lobe 3: Coral Vitality (Warmth, Energy, Speech Wave)
-      const coralWeight = state === ORB_STATES.SPEAKING ? 0.95 : 0.65;
-      const a3 = s.time * 1.15 * rotSpeed + 4.2;
-      const x3 = Math.cos(a3) * (baseRadius * 0.2);
-      const y3 = Math.sin(a3) * (baseRadius * 0.2);
-      const r3Grad = ctx.createRadialGradient(x3, y3, 0, x3, y3, baseRadius * 0.8);
-      r3Grad.addColorStop(0, coral + `${coralWeight})`);
-      r3Grad.addColorStop(0.65, coral + `${coralWeight * 0.4})`);
-      r3Grad.addColorStop(1, coral + '0)');
-      ctx.fillStyle = r3Grad;
-      ctx.beginPath();
-      ctx.arc(x3, y3, baseRadius * 0.8, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 4. Soft Bright Core Center
-      ctx.globalCompositeOperation = 'lighter';
-      const coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, baseRadius * 0.5);
-      coreGrad.addColorStop(0, 'rgba(255, 255, 255, 0.7)');
-      coreGrad.addColorStop(0.5, lightBlue + '0.4)');
-      coreGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-      ctx.fillStyle = coreGrad;
-      ctx.beginPath();
-      ctx.arc(0, 0, baseRadius * 0.5, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 5. Special State Visual Overlays
-      if (state === ORB_STATES.PAUSED) {
-        // Twin calm vertical pause pills
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.fillRect(-12, -18, 8, 36);
-        ctx.fillRect(4, -18, 8, 36);
-      }
-
-      ctx.restore();
-
-      animFrameRef.current = requestAnimationFrame(render);
     };
 
-    render();
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(stageEl);
+    return () => observer.disconnect();
+  }, [size]);
+
+  // Apply `--orb-diameter` and `ambientMotion` whenever diameter/theme/reducedMotion change
+  useEffect(() => {
+    const motionEl = motionRef.current;
+    if (!motionEl) return;
+    motionEl.style.setProperty('--orb-diameter', `${effectiveDiameter}px`);
+    applyAmbientMotion(motionEl, resolvedTheme, reducedMotion);
+    if (controllerRef.current && !controllerRef.current.destroyed) {
+      controllerRef.current.resize();
+    }
+  }, [effectiveDiameter, resolvedTheme, reducedMotion, applyAmbientMotion]);
+
+  // Create OrbController ONCE per mounted canvas via client-only dynamic import
+  useEffect(() => {
+    let cancelled = false;
+    const canvas = canvasRef.current;
+    const motionEl = motionRef.current;
+    if (!canvas || !motionEl) return undefined;
+
+    const markWebglFailure = () => {
+      if (cancelled) return;
+      motionEl.classList.add('orb-no-webgl');
+      setWebglFailed(true);
+    };
+
+    motionEl.style.setProperty('--orb-diameter', `${effectiveDiameter}px`);
+    applyAmbientMotion(motionEl, resolvedTheme, reducedMotion);
+
+    import('orbloom')
+      .then(({ createOrb }) => {
+        if (cancelled || !canvasRef.current) return;
+        try {
+          const controller = createOrb(canvasRef.current, {
+            theme: resolvedTheme,
+            quality,
+            state: orbloomState,
+            reducedMotion,
+            onError: () => markWebglFailure(),
+          });
+          if (cancelled) {
+            controller.destroy();
+            return;
+          }
+          controllerRef.current = controller;
+          controller.resize();
+        } catch (err) {
+          console.warn('[VoiceOrb] WebGL initialization failed, falling back to CSS nebula gradient:', err?.message);
+          markWebglFailure();
+        }
+      })
+      .catch((err) => {
+        console.warn('[VoiceOrb] Failed to load orbloom runtime:', err?.message);
+        markWebglFailure();
+      });
 
     return () => {
-      isRunning = false;
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      cancelled = true;
+      if (levelRafRef.current) {
+        cancelAnimationFrame(levelRafRef.current);
+        levelRafRef.current = null;
+      }
+      if (controllerRef.current) {
+        controllerRef.current.destroy();
+        controllerRef.current = null;
+      }
     };
-  }, [state, size, reducedMotion]);
+    // Intentionally run once per canvas mount; prop updates flow through controller setters below
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Reduced Motion Accessibility Fallback
-  if (reducedMotion) {
-    const reducedIcons = {
-      [ORB_STATES.LISTENING]: Mic,
-      [ORB_STATES.SPEAKING]: Volume2,
-      [ORB_STATES.THINKING]: Brain,
-      [ORB_STATES.PROCESSING]: Brain,
-      [ORB_STATES.PAUSED]: Pause,
-      [ORB_STATES.RECONNECTING]: RefreshCw,
-      [ORB_STATES.RECOVERING]: RefreshCw,
-      [ORB_STATES.URGENT]: AlertTriangle,
-      [ORB_STATES.COMPLETED]: CheckCircle2,
-      [ORB_STATES.FAILED]: AlertCircle,
-      [ORB_STATES.UNCERTAIN]: HelpCircle,
+  // Push prop changes without recreating controller
+  useEffect(() => {
+    const ctrl = controllerRef.current;
+    if (!ctrl || ctrl.destroyed) return;
+    ctrl.setState(orbloomState);
+  }, [orbloomState]);
+
+  useEffect(() => {
+    const ctrl = controllerRef.current;
+    if (!ctrl || ctrl.destroyed) return;
+    ctrl.setTheme(resolvedTheme);
+    applyAmbientMotion(motionRef.current, resolvedTheme, reducedMotion);
+  }, [resolvedTheme, reducedMotion, applyAmbientMotion]);
+
+  useEffect(() => {
+    const ctrl = controllerRef.current;
+    if (!ctrl || ctrl.destroyed) return;
+    ctrl.setQuality(quality);
+  }, [quality]);
+
+  useEffect(() => {
+    const ctrl = controllerRef.current;
+    if (!ctrl || ctrl.destroyed) return;
+    ctrl.setReducedMotion(reducedMotion);
+  }, [reducedMotion]);
+
+  // Feed instantaneous audio level cleanly when reactive (or driven by slider/analyser)
+  const hasNumericLevel = typeof level === 'number';
+  useEffect(() => {
+    if (levelRafRef.current) {
+      cancelAnimationFrame(levelRafRef.current);
+      levelRafRef.current = null;
+    }
+
+    const isReactiveState =
+      orbloomState === 'listening' || orbloomState === 'speaking' || hasNumericLevel;
+
+    if (!isReactiveState) {
+      controllerRef.current?.setAudioLevel(0);
+      return undefined;
+    }
+
+    let running = true;
+    const pump = () => {
+      if (!running) return;
+      const ctrl = controllerRef.current;
+      if (ctrl && !ctrl.destroyed) {
+        ctrl.setAudioLevel(getInstantLevel());
+      }
+      levelRafRef.current = requestAnimationFrame(pump);
     };
-    const IconComponent = reducedIcons[state] || Mic;
+    levelRafRef.current = requestAnimationFrame(pump);
 
-    return (
-      <div
-        style={{ width: size, height: size }}
-        className={`relative flex flex-col items-center justify-center rounded-full bg-gradient-to-tr from-primary to-accent/80 border-4 border-surface shadow-soft-lift select-none ${className}`}
-        role="img"
-        aria-label={`Voice state: ${state}`}
-      >
-        <div className="w-16 h-16 rounded-full bg-surface text-primary flex items-center justify-center shadow-md">
-          <IconComponent className="w-8 h-8" />
+    return () => {
+      running = false;
+      if (levelRafRef.current) {
+        cancelAnimationFrame(levelRafRef.current);
+        levelRafRef.current = null;
+      }
+    };
+  }, [orbloomState, hasNumericLevel, getInstantLevel]);
+
+  const orbDom = (
+    <div
+      ref={motionRef}
+      className={`orb-motion${webglFailed ? ' orb-no-webgl' : ''}${!staged && className ? ` ${className}` : ''}`}
+      style={{ '--orb-diameter': `${effectiveDiameter}px` }}
+    >
+      <div className="orb-shell">
+        <div className="orb-clip">
+          <canvas ref={canvasRef} className="orb-canvas" aria-label="Voice activity" />
+          <div className="orb-fallback" aria-hidden="true" />
         </div>
-        <span className="text-xs font-bold text-on-primary uppercase tracking-wider mt-2">
-          {state}
+        <div className="orb-chrome" aria-hidden="true" />
+      </div>
+    </div>
+  );
+
+  if (!staged) {
+    return (
+      <div ref={stageRef} className="companio-orb-frame">
+        {orbDom}
+        <span className="sr-only" role="status" aria-live="polite">
+          {accessibleStatusText}
         </span>
       </div>
     );
@@ -277,17 +260,14 @@ export default function VoiceOrb({
 
   return (
     <div
-      style={{ width: size, height: size }}
-      className={`relative flex items-center justify-center select-none ${className}`}
-      role="img"
-      aria-label={`Voice assistant active: ${state}`}
+      ref={stageRef}
+      className={`companio-orb-stage${effectiveDiameter < 220 ? ' companio-orb-stage--compact' : ''} ${className}`.trim()}
     >
-      <canvas
-        ref={canvasRef}
-        style={{ width: size, height: size }}
-        className="block"
-      />
+      <div className="companio-orb-stage-grain" aria-hidden="true" />
+      <div className="companio-orb-frame">{orbDom}</div>
+      <span className="sr-only" role="status" aria-live="polite">
+        {accessibleStatusText}
+      </span>
     </div>
   );
 }
-

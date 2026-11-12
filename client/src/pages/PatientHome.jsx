@@ -214,13 +214,16 @@ export default function PatientHome() {
             </div>
           </div>
 
-          {/* Small Idle Voice Orb Anchor */}
-          <div className="flex flex-col items-center justify-center shrink-0">
-            <div className="p-3 rounded-full bg-surface-sunken border border-border shadow-sm">
-              <VoiceOrb state={ORB_STATES.LISTENING} size={150} />
-            </div>
+          {/* Idle Voice Orb Anchor (always starts neutral, never claims listening) */}
+          <div className="flex flex-col items-center justify-center shrink-0 w-full sm:w-auto max-w-[304px]">
+            <VoiceOrb
+              state={ORB_STATES.IDLE}
+              size={264}
+              quality="balanced"
+              statusLabel="Voice check-in companion is ready"
+            />
             <span className="text-xs font-semibold text-text-muted mt-2 text-center">
-              Microphone ambient listening ready
+              Tap Start Today's Check-in to enable microphone
             </span>
           </div>
         </div>

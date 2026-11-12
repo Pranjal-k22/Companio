@@ -57,10 +57,10 @@ export default function VoiceCheckIn() {
   // Documented default emergency number with fallback from organization settings
   const emergencyNumber = activeOrganization?.settings?.emergencyNumber || activeOrganization?.contactPhone || '911';
 
-  // Core Voice State & Orb State
-  const [orbState, setOrbState] = useState(ORB_STATES.CONNECTING);
+  // Core Voice State & Orb State (always opens in neutral `idle` state until user gesture)
+  const [orbState, setOrbState] = useState(ORB_STATES.IDLE);
   const [currentQuestion, setCurrentQuestion] = useState(
-    "Hello! I'm Companio, your health companion. How are you feeling today?"
+    "Hello! I'm Companio, your health companion. Tap Start Check-in when you're ready to speak."
   );
   const [sectionStep, setSectionStep] = useState(1); // 1: Vitals, 2: Symptoms, 3: Meds, 4: Wrap-up
   const totalSteps = 4;
@@ -72,7 +72,7 @@ export default function VoiceCheckIn() {
   const [detectedFlags, setDetectedFlags] = useState([]);
 
   // System & Connection State
-  const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connecting' | 'connected' | 'reconnecting' | 'offline'
+  const [connectionStatus, setConnectionStatus] = useState('idle'); // 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'offline'
   const [isAudioContextSuspended, setIsAudioContextSuspended] = useState(false);
   const [micPermissionDenied, setMicPermissionDenied] = useState(false);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
@@ -84,6 +84,8 @@ export default function VoiceCheckIn() {
   const captionsContainerRef = useRef(null);
   const captionEndRef = useRef(null);
   const turnCounterRef = useRef(0);
+  const orbStateRef = useRef(orbState);
+  orbStateRef.current = orbState;
 
   // Audio Playback Hook
   const {
@@ -136,6 +138,7 @@ export default function VoiceCheckIn() {
     stopRecording,
     getAudioLevel,
   } = useRawPCM((arrayBuffer) => {
+    if (orbStateRef.current === ORB_STATES.PAUSED) return;
     if (socketRef.current && socketRef.current.connected) {
       // Natural speech barge-in: If patient speaks while Companio speaks, interrupt immediately
       if (isPlaying) {
@@ -190,18 +193,46 @@ export default function VoiceCheckIn() {
     }
   }, [captions, partialTranscript, isManualScroll]);
 
-  // Establish Voice Socket Session
+  // Establish Voice Socket Session (must be invoked from an explicit user gesture for mic/audio)
   const initializeVoiceSession = useCallback(async () => {
-    unlockAudioContext();
     setErrorMessage(null);
     setMicPermissionDenied(false);
-    setOrbState(ORB_STATES.CONNECTING);
-    setConnectionStatus('connecting');
+
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      setConnectionStatus('offline');
+      setOrbState(ORB_STATES.FAILED);
+      setErrorMessage('Microphone access requires a secure HTTPS connection.');
+      return;
+    }
+
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+      setConnectionStatus('offline');
+      setOrbState(ORB_STATES.FAILED);
+      setErrorMessage('Microphone capture is not supported in this browser.');
+      return;
+    }
 
     const token = localStorage.getItem('companio_token');
     if (!token) {
       navigate('/login');
       return;
+    }
+
+    unlockAudioContext();
+    setOrbState(ORB_STATES.CONNECTING);
+    setConnectionStatus('connecting');
+
+    // Request microphone inside user gesture BEFORE connecting / claiming listening
+    const started = await startRecording();
+    if (!started) {
+      setConnectionStatus('idle');
+      setOrbState(ORB_STATES.MIC_NEEDED);
+      return;
+    }
+
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
     }
 
     const socket = io('/voice', {
@@ -213,21 +244,16 @@ export default function VoiceCheckIn() {
 
     socketRef.current = socket;
 
-    socket.on('connect', async () => {
+    socket.on('connect', () => {
       setConnectionStatus('connected');
       socket.emit('start-session', { type: 'daily' });
-
-      const started = await startRecording();
-      if (started) {
-        setOrbState(ORB_STATES.LISTENING);
-      } else {
-        setOrbState(ORB_STATES.MIC_NEEDED);
-      }
+      setOrbState(ORB_STATES.LISTENING);
     });
 
     socket.on('voice:state:change', (data) => {
-      if (data?.state) {
-        const nextState = mapBackendToOrbState(data.state);
+      const nextRawState = data?.currentState || data?.state;
+      if (nextRawState) {
+        const nextState = mapBackendToOrbState(nextRawState);
         setOrbState(nextState);
       }
       if (data?.turnId) {
@@ -272,9 +298,10 @@ export default function VoiceCheckIn() {
       }
     });
 
-    socket.on('agent-audio-chunk', (arrayBuffer) => {
+    socket.on('agent-audio-chunk', (payload) => {
+      const audioPayload = payload?.audio || payload;
       setOrbState(ORB_STATES.SPEAKING);
-      queueChunk(arrayBuffer);
+      queueChunk(audioPayload);
     });
 
     // Barge-In Acknowledged by Backend
@@ -308,13 +335,31 @@ export default function VoiceCheckIn() {
       setErrorMessage(data?.message || 'Check-in stopped because consent was revoked.');
     });
 
-    // Reconnection Events
-    socket.on('reconnect_attempt', () => {
+    socket.on('voice:error', (err) => {
+      stopRecording();
+      stopPlayback();
+      setConnectionStatus('offline');
+      setOrbState(ORB_STATES.FAILED);
+      setErrorMessage(err?.message || 'Voice check-in encountered an error.');
+    });
+
+    socket.on('stt-error', (err) => {
+      stopRecording();
+      setOrbState(ORB_STATES.FAILED);
+      setErrorMessage(err?.message || 'Speech recognition is currently unavailable.');
+    });
+
+    socket.on('tts-error', (err) => {
+      setErrorMessage(err?.message || 'Voice playback encountered an issue.');
+    });
+
+    // Reconnection Events (Socket.IO v4 Manager + Socket)
+    socket.io.on('reconnect_attempt', () => {
       setConnectionStatus('reconnecting');
       setOrbState(ORB_STATES.RECONNECTING);
     });
 
-    socket.on('reconnect', () => {
+    socket.io.on('reconnect', () => {
       setConnectionStatus('connected');
       if (canResume) {
         attemptResume();
@@ -327,19 +372,18 @@ export default function VoiceCheckIn() {
       setConnectionStatus('offline');
       setOrbState(ORB_STATES.RECONNECTING);
     });
-  }, [navigate, startRecording, stopPlayback, queueChunk, canResume, attemptResume, clearRecovery, detectedFlags, unlockAudioContext]);
+  }, [navigate, startRecording, stopRecording, stopPlayback, queueChunk, canResume, attemptResume, clearRecovery, detectedFlags, unlockAudioContext]);
 
   useEffect(() => {
-    initializeVoiceSession();
-
     return () => {
       stopRecording();
       stopPlayback();
       if (socketRef.current) {
         socketRef.current.disconnect();
+        socketRef.current = null;
       }
     };
-  }, []);
+  }, [stopRecording, stopPlayback]);
 
   // Control Actions
   const handleRepeat = () => {
@@ -396,6 +440,9 @@ export default function VoiceCheckIn() {
               Daily Voice Check-in
             </h1>
             <div className="flex items-center gap-2 mt-0.5">
+              {connectionStatus === 'idle' && (
+                <StatusBadge variant="neutral" size="sm">Ready</StatusBadge>
+              )}
               {connectionStatus === 'connected' && (
                 <StatusBadge variant="success" size="sm">Connected</StatusBadge>
               )}
@@ -503,12 +550,13 @@ export default function VoiceCheckIn() {
 
         {/* Central VoiceOrb & State Label */}
         <div className="flex flex-col items-center justify-center space-y-4 my-2">
-          {/* Living Fluid VoiceOrb */}
+          {/* Living Fluid Orbloom WebGL Orb (respects user reduced motion by default) */}
           <VoiceOrb
-            state={orbState}
+            state={!isRecording && orbState === ORB_STATES.LISTENING ? ORB_STATES.IDLE : orbState}
             level={getActiveAudioLevel}
-            size={200}
-            reducedMotion={false}
+            size={264}
+            quality="balanced"
+            className="max-w-md"
           />
 
           {/* Accessible State Copy Label */}
@@ -517,9 +565,24 @@ export default function VoiceCheckIn() {
             className="text-center px-4 py-1.5 rounded-full bg-surface-sunken border border-border"
           >
             <p className="text-base sm:text-lg font-bold text-text-strong">
-              {STATE_COPY[orbState] || STATE_COPY.listening}
+              {(!isRecording && orbState === ORB_STATES.LISTENING
+                ? STATE_COPY.idle
+                : STATE_COPY[orbState]) || STATE_COPY.idle}
             </p>
           </div>
+
+          {/* Explicit User-Gesture Start CTA when idle */}
+          {orbState === ORB_STATES.IDLE && (
+            <Button
+              variant="primary"
+              size="xl"
+              leftIcon={Mic}
+              onClick={initializeVoiceSession}
+              className="min-h-[64px] px-8 text-lg font-bold shadow-lg"
+            >
+              Start Voice Check-in
+            </Button>
+          )}
 
           {/* Microphone Permission Guidance */}
           {micPermissionDenied && (
