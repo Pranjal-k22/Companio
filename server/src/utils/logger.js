@@ -33,6 +33,14 @@ const PHI_PATTERNS = [
   { regex: /(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g, replacement: '[REDACTED_PHONE]' },
   // Social Security Numbers (XXX-XX-XXXX)
   { regex: /\b\d{3}-\d{2}-\d{4}\b/g, replacement: '[REDACTED_SSN]' },
+  // Medical Record Numbers (MRN)
+  { regex: /\b(?:MRN|mrn|REC|rec|ID|id)[\s:#-]*[A-Z0-9]{6,14}\b/gi, replacement: '[REDACTED_MRN]' },
+  // US Zip Codes
+  { regex: /\b\d{5}(?:-\d{4})?\b/g, replacement: '[REDACTED_ZIP]' },
+  // Calendar Dates
+  { regex: /\b(?:\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2})\b/g, replacement: '[REDACTED_DATE]' },
+  // IP Addresses (IPv4)
+  { regex: /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g, replacement: '[REDACTED_IP]' },
   // JWT Bearer tokens
   { regex: /^Bearer\s+eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/g, replacement: '[REDACTED_JWT_TOKEN]' },
 ];

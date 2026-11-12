@@ -6,7 +6,11 @@ import { User } from '../../models/User.js';
 import { Organization } from '../../models/Organization.js';
 import { EscalationEvent } from '../../models/EscalationEvent.js';
 import { resolveEscalationRecipients, calculateRetryDelay } from './escalationPolicyEngine.js';
-import { createZeroPhiNotificationPayload, isZeroPhiModeEnabled } from '../privacy/deidentificationService.js';
+import {
+  createZeroPhiNotificationPayload,
+  isZeroPhiModeEnabled,
+  auditOutboundPayload,
+} from '../privacy/deidentificationService.js';
 
 // Category translator
 const CATEGORY_LABELS = {
@@ -68,6 +72,14 @@ export async function dispatchSingleEvent(eventDoc, context = {}) {
             channel: 'SMS',
           });
           smsBody = zeroPayload.body;
+
+          // Outbound Pre-Flight Privacy Firewall Check
+          const audit = auditOutboundPayload(smsBody, { patientName });
+          if (!audit.isClean) {
+            throw new Error(
+              `[Zero-PHI Fail-Closed Firewall] Outbound SMS blocked due to detected identifiers: ${audit.violations.join(', ')}`
+            );
+          }
         } else {
           smsBody = `🚨 COMPANIO [TIER ${eventDoc.tier || 1}] ALERT
 Patient: ${patientName}
@@ -115,6 +127,14 @@ Review: ${detailUrl || 'Dashboard'}`;
           });
           emailSubject = zeroPayload.subject;
           emailHtml = zeroPayload.html;
+
+          // Outbound Pre-Flight Privacy Firewall Check
+          const audit = auditOutboundPayload(`${emailSubject} ${emailHtml}`, { patientName });
+          if (!audit.isClean) {
+            throw new Error(
+              `[Zero-PHI Fail-Closed Firewall] Outbound Email blocked due to detected identifiers: ${audit.violations.join(', ')}`
+            );
+          }
         } else {
           emailSubject = `🚨 [URGENT TIER-${eventDoc.tier || 1} ALERT] ${patientName} - ${categoryLabel}`;
           emailHtml = `

@@ -1,117 +1,65 @@
-# Changelog & Architectural Milestones
+# Changelog
 
-All notable changes and architectural phases for the **Companio** healthcare platform are documented in this file.
+All notable changes to the **Companio** platform are summarized here. For the complete, granular release log across all engineering phases, see [`docs/14_DEVELOPMENT_AND_RELEASE/CHANGELOG.md`](docs/14_DEVELOPMENT_AND_RELEASE/CHANGELOG.md).
 
----
-
-## 🚀 Recent Architectural Upgrades (Today)
-
-### `feat(logs-profile)`: data-bind voice audit logs and patient/clinician profile settings
-- **Voice Check-in Audit Logs & Transcripts**:
-  - Enhanced `Conversation` schema with `turns`, `transcriptSnippet`, `durationSeconds`, `aiToneSummary`, `sttAccuracy`, and `riskFlag`.
-  - Built Express REST router `server/src/routes/conversations.js` (`GET /api/conversations`, `GET /api/conversations/:id`) with role-based filtering, text search regex, and linked flag risk categorization.
-  - Upgraded `client/src/pages/ClinicianVoiceLogs.jsx` with live data fetching, AssemblyAI STT attribution, real-time query filtering, triage risk badge filtering, and expandable dialogue turn drawer.
-  - Updated Socket.io `voiceSession.js` `end-session` handler to automatically persist speech snippets, duration, and dialogue turns to MongoDB upon check-in completion.
-- **User Profile & Settings API**:
-  - Added `PUT /api/auth/profile` in `server/src/controllers/authController.js` and `server/src/routes/authRoutes.js`.
-  - Data-bound `client/src/pages/PatientSettings.jsx` (contact phone, designated next-of-kin emergency contact, senior speech speed preference, accessibility font scaling).
-  - Data-bound `client/src/pages/ClinicianSettings.jsx` (hospital unit affiliation, on-call contact phone, instant red flag SMS alerts, daily morning digest).
-  - Standardized middleware aliases (`authenticateToken`, `roleCheck`) and expanded automated test suite to 41/41 passing assertions.
-
-### `939d39d` — feat(core): implement Stage 1-4 architecture upgrades (UI realism, cron worker, PCM audio, schemas)
-- **Stage 1 (UI Realism & Resilience)**:
-  - Replaced generic spinners with bespoke medical skeleton loaders (`PatientCardSkeleton`, `VitalsChartSkeleton`, `TableSkeleton`, `StatCardSkeleton`).
-  - Added global React `ErrorBoundary` with emergency medical callout (911 notice) and application recovery.
-  - Added real-time network loss listener hook `useNetworkStatus` and non-intrusive floating `NetworkStatusToast`.
-  - Added branded healthcare SVG favicon and integrated high-legibility medical font stack (`Plus Jakarta Sans`).
-- **Stage 2 (Relational Data Binding)**:
-  - Created production Mongoose schemas for `Appointment` and `LabResult` with enums, compound indexes (`{ clinicianId: 1, dateTime: 1 }`, `{ patientId: 1, collectionDate: -1 }`), and dynamic clinical biomarkers (HbA1c, eGFR, Fasting Glucose, Lipid Panel).
-  - Built Express REST routers (`/api/appointments`, `/api/lab-results`) and connected `PatientAppointments.jsx`, `ClinicianAppointments.jsx`, and `PatientPathology.jsx`.
-  - Updated database seeder with realistic out-of-range clinical markers.
-- **Stage 3 (Automated Weekly Report Worker)**:
-  - Implemented background cron worker (`server/src/jobs/weeklyReportWorker.js`) using `node-cron` scheduled for Mondays at 2:00 AM (`0 2 * * 1`).
-  - Batch chunking (50 patients per chunk) with isolated per-patient error handling to guarantee flat memory overhead.
-- **Stage 4 (Hardware-Accelerated AudioWorklet)**:
-  - Created dedicated background thread `AudioWorkletProcessor` (`client/public/audio-processor.js`) resampling mic frames to 16kHz 16-bit linear PCM (`Int16Array`).
-  - Implemented `useRawPCM.js` with iOS Safari AudioContext gesture unlock and zero-copy byte streaming.
-
-### `4599285` — fix(escalation): add Twilio alias support for clinician alerts
-- Added backward-compatible environment variable aliases for `TWILIO_PHONE_NUMBER` (alias of `TWILIO_FROM_NUMBER`) and `CLINICIAN_PHONE_NUMBER` (alias of `CLINICIAN_NOTIFICATION_PHONE`).
-
-### `ffcb273` — fix(llm): update Gemini model identifier to gemini-3.8-flash with failover
-- Upgraded conversational agent and report generator model strings to `gemini-3.8-flash`.
-- Added automatic secondary candidate fallback (`gemini-2.5-flash`) with 12s request timeouts to ensure high demand spikes never block the clinical pipeline.
-
-### `9b766ad` — feat(voice): migrate STT pipeline from Deepgram to AssemblyAI
-- Integrated AssemblyAI streaming STT WebSocket client (`assemblyAISTT.js`) with older-adult silence endpointing (~900ms).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## 🛡️ Phase 10–13: UI & Escalation
+## [Unreleased — Phase 12.2.1 & Documentation Consolidation] - 2026-11-12
 
-### `a1b2c3d` — chore(deploy): add Dockerfiles, compose script, and README (Phase 13)
-- Multi-stage containerization via `Dockerfile.server`, `Dockerfile.client`, and `docker-compose.yml`.
-- Cross-platform cold-start launcher scripts (`start-demo.bat` and `start-demo.sh`).
-
-### `e8f9a0b` — feat(escalation): email/sms escalation via Mongoose post-save hook (Phase 12)
-- Automated clinical alert dispatcher triggered on `Flag` creation with `severity: 'red'`.
-- Real-time email dispatch via Resend API and SMS via Twilio.
-- Persistent audit logging in `EscalationEvent` collection with retry resiliency.
-
-### `c4d5e6f` — feat(patient): senior-friendly UI with live captions and high-contrast targets (Phase 11)
-- Built `PatientHome.jsx`, `VoiceCheckIn.jsx`, and `CheckInComplete.jsx`.
-- 64px+ circular touch targets conforming to WCAG AA accessibility standards.
-- Live auto-scrolling speech captions and visual state pulsing (Listening, Thinking, Speaking).
-
-### `b2c3d4e` — feat(clinician): triage dashboard with Recharts trends and flag management (Phase 10)
-- Built `ClinicianDashboard.jsx` sorting patients by open red flags and urgency tier.
-- Interactive `PatientDetail.jsx` with Recharts time-series charts (adherence %, sleep, hydration, activity).
-- One-click flag review workflow and on-demand report regeneration.
+### Added
+- **Phase 12.2.1 De-Identification Assurance & Fail-Closed Firewall** (pending commit):
+  - Expanded `server/src/services/privacy/deidentificationService.js` across 18 HIPAA Safe Harbor pattern categories, strict Safe Harbor `>= 90` cohort aggregation (`safeHarborAgeCategory`), and internal HMAC-SHA256 pseudonymous tokens (`createOpaqueReference`).
+  - Added pre-flight fail-closed payload gate (`auditOutboundPayload`) in `escalationDispatcher.js` aborting Twilio SMS and Resend Email transmission if residual identifiers appear.
+  - Added deep logger redaction regexes in `server/src/utils/logger.js`.
+  - Added 30-assertion adversarial test suite `server/src/tests/privacy/testPhase1221DeidentificationAudit.js` (`npm run test:deid:audit`).
+- **Master Engineering Knowledge Base (`docs/`) & Root Governance Docs**:
+  - Reorganized `docs/` into 15 structured engineering domains (`01_PRODUCT` through `15_PHASE_REPORTS`) preserving all historical phase completion reports intact.
+  - Added root `AI_AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`, updated `README.md`, and complete Blueprint coverage.
 
 ---
 
-## 🎙️ Phase 6–9: Voice Pipeline & Safety
+## [1.13.0] - 2026-11-04 (`da75a0b`)
 
-### `f1a2b3c` — feat(reports): deterministic JS trend math with template fail-safe (Phase 9)
-- Two-stage clinical report generation pipeline.
-- Plain JavaScript computes ground-truth statistics to prevent AI arithmetic hallucinations.
-- LLM narration constrained to strict JSON schema with template fallback.
-
-### `d9e8f7a` — feat(tts): ElevenLabs integration and gapless web audio playback (Phase 8)
-- Real-time voice synthesis streaming via ElevenLabs Rachel voice preset (`eleven_turbo_v2_5`).
-- Sub-second round-trip turn latency (~775ms).
-- Client Web Audio API player with barge-in interruption support.
-
-### `c7d8e9f` — feat(safety): deterministic keyword safety net with atomic flag deduplication (Phase 7)
-- Dual-layer emergency detection: LLM function calling + independent regex phrase filter.
-- 13 Red / 10 Yellow clinical taxonomy categories.
-- Atomic deduplication ensuring zero missed red flags even if LLM misses a tool invocation.
-
-### `a5b6c7d` — feat(llm): Gemini health conversation agent with strict no-diagnosis tool calling (Phase 6)
-- Conversational agent persona tailored for older adults.
-- Strict clinical guardrails prohibiting unauthorized medical diagnosis or medication alterations.
-- Tool calling schemas: `logCheckin`, `flagConcern`, `recordConcern`, `endConversation`.
+### Added & Changed
+- **Enterprise "Bloom" Design System & Multi-Role Frontend Redesign (Stages 0–11):**
+  - Implemented Day/Night semantic tokens, 100%–150% text scaling, `prefers-reduced-motion`, 20-pair WCAG 2.1 contrast audit (`npm run check:contrast`), and route-level `React.lazy()` code splitting in `client/src/App.jsx`.
+  - Built 16-state audio-reactive `VoiceOrb`, Patient read-back (`CheckInComplete`), longitudinal `PatientWellnessHistory`, Clinician Triage (`ClinicianDashboard`, `PatientDetail`, `ClinicianReports`), Caregiver Portal pages, and Organization Admin operational views (`AdminOrganization`).
+  - Added E2E backend initialization & test scripts (`24d6965`).
 
 ---
 
-## 🏗️ Phase 1–5: Foundation
+## [1.12.2] - 2026-11-04 (`9c225bd`)
 
-### `e1f2a3b` — feat(stt): streaming transcription with 900ms silence endpointing (Phase 5)
-- Real-time speech-to-text streaming pipeline over WebSocket.
-- Tuned silence thresholds accommodating older-adult speech cadence.
+### Added
+- **Pilot-Safe De-Identification & External Validation Closure (Phase 12.2):**
+  - Introduced `deidentificationService.js` with `createZeroPhiNotificationPayload()` and `npm run test:deid` (12/12 passing).
+  - Finalized Four-Tier Readiness Matrix keeping human recruitment halted (`BLOCKED`) and platform locked in synthetic-data mode.
 
-### `d1c2b3a` — feat(socket): authenticated voice namespace and session lifecycle events (Phase 4)
-- Socket.io `/voice` namespace with handshake authentication middleware.
-- Full session lifecycle event management (`start-session`, `audio-chunk`, `session-ended`).
+---
 
-### `b8a9c0d` — feat(auth): stateless JWT authentication and role-based middleware (Phase 3)
-- Stateless JWT issuance and password hashing with bcrypt.
-- Role-based route protection for `PATIENT`, `CLINICIAN`, and `ADMIN`.
+## [1.12.0 – 1.12.1] - 2026-11-04 (`450fca1`, `673fe7c`)
 
-### `a4b5c6d` — feat(db): Mongoose models for Patient, Checkin, Flag, and seed script (Phase 2)
-- Structured Mongoose models with validation and indexes.
-- Database seeder generating 10-day historical check-ins across 3 synthetic patient profiles.
+### Added
+- Cryptographic password recovery (`/api/v1/auth/forgot-password`, `/reset-password`) with immediate JWT invalidation (`npm run test:recovery`), 11-stage controlled pilot suite (`npm run test:pilot`), Provider/Clinical/IRB/Human-Factors governance registers.
 
-### `8f9e0d1` — init(repo): scaffold MERN monorepo with Vite, Express, and Socket.io (Phase 1)
-- Monorepo structure with concurrently orchestrating client and server dev environments.
-- Tailwind CSS dark/light theme foundation.
+---
+
+## [1.9.0 – 1.11.0] - 2026-11-04 (`d39b45f`, `6896449`, `cfe1752`, `575e0ca`)
+
+### Added
+- **Phase 11:** STRIDE threat model, 18-dimension security assessment, ISO 14971 clinical hazard register, automated MongoDB backup/restore drill (`npm run test:drill`).
+- **Phase 10:** Release Gates A–E (`npm run test:operations`), Zod startup `envValidator.js`, Prometheus `/metrics`, Kubernetes health probes, `alertEngine.js`, `outboxReconciler.js`, rate limiters.
+- **Phase 9 & 9.1:** Redis + BullMQ 7-queue distributed architecture with `InMemoryQueue` fallback (`npm run test:jobs`, `npm run test:redis`).
+
+---
+
+## [1.1.0 – 1.8.0] - Historical Foundations (`e82d9a6` and prior)
+
+- **Phase 8:** Caregiver & Family Portal (`CaregiverRelationship`, `CaregiverAccessGrant`, `CaregiverConcern`, immutable `CaregiverAccessEvent`, `npm run test:caregivers`).
+- **Phase 7:** Deterministic Clinical Reporting, `ReportAttestation`, SHA-256 provenance, PDFKit export (`npm run test:reporting`).
+- **Phase 6:** Clinical Dialogue Manager (`DialogueSession`, daily/weekly workflows, LOINC `Observation` extraction, `npm run test:dialogue`).
+- **Phase 5:** Dual-layer Clinical Safety Net (13 RED / 10 YELLOW rules), `Flag` lifecycle, Twilio/Resend outbox (`npm run test:safety`).
+- **Phase 4:** Hardened `/voice` Socket.IO FSM, audio chunk sequencing, barge-in, resume recovery, consent revocation (`npm run test:voice`), AssemblyAI STT, Gemini LLM, ElevenLabs TTS, 16kHz PCM AudioWorklet.
+- **Phases 1–3:** Multi-tenant Organizations, Memberships (7 RBAC roles), Teams, Invitations, immutable `ConsentRecord`, JWT auth, Express `/api/v1`, RFC 9457 error handling.
