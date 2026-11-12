@@ -116,7 +116,7 @@
 
 See [README.md](README.md) for Phase 1–12.2 completion report links. Other baseline audits and specialized phase records remain in this directory.
 
-## Reconciliation warnings
+## Documentation validation\n\n- [Documentation validation report](DOCUMENTATION_VALIDATION_REPORT.md) — records the 2026-11-12 documentation-only consolidation, files added, discrepancies and remaining validation scope.\n\n## Reconciliation warnings
 
 1. [TRD.md](TRD.md) includes older provider names (Deepgram, OpenAI, Nodemailer) conflicting with later implementation reports and current package dependencies. Treat it as an early design snapshot.
 2. [UI_UX_INFORMATION_ARCHITECTURE.md](UI_UX_INFORMATION_ARCHITECTURE.md) labels caregiver portal areas planned despite later Phase 8 docs and current frontend components. Verify exact routes before relying on its old sitemap.
