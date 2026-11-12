@@ -1,5 +1,5 @@
 import { Conversation, Patient, Checkin, DialogueSession } from '../models/index.js';
-import { createAssemblyAISTTStream } from '../services/voice/stt/assemblyAISTT.js';
+import { createAssemblyAISTTStream, STT_STATES } from '../services/voice/stt/assemblyAISTT.js';
 import { processConversationTurn } from '../services/voice/llm/healthConversationAgent.js';
 import { runSafetyNetCheck } from '../services/safety/keywordSafetyNet.js';
 import { streamTTSResponse } from '../services/voice/tts/elevenLabsTTS.js';
@@ -171,8 +171,187 @@ async function callLLM(userTranscript, session, socket, activeTurn) {
 /**
  * Initialize Socket.io Voice Session Pipeline Event Handlers
  */
-export const initVoiceSocket = (io) => {
+export const initVoiceSocket = (io, deps = {}) => {
   const voiceNamespace = io.of('/voice');
+  const createSttStream = deps.createSTTStream || createAssemblyAISTTStream;
+  const ConversationModel = deps.ConversationModel || Conversation;
+  const PatientModel = deps.PatientModel || Patient;
+  const DialogueSessionModel = deps.DialogueSessionModel || DialogueSession;
+  const verifyConsentFn = deps.verifyVoiceConsent || verifyVoiceConsent;
+  const sttOptionsOverrides = deps.sttOptions || {};
+
+  const handleSessionSttFailure = async (sessionState, errorInfo = {}) => {
+    if (!sessionState || sessionState._ending) {
+      return;
+    }
+    if (sessionState._failurePromise) {
+      return sessionState._failurePromise;
+    }
+    if (sessionState._sttFailureHandled) {
+      return;
+    }
+    sessionState._sttFailureHandled = true;
+
+    sessionState._failurePromise = (async () => {
+      const { socket, sessionId, fsm, turnManager, sttStream, conversationId } = sessionState;
+
+      try {
+        turnManager?.cancelActiveTurn('stt_failed');
+      } catch (_) {}
+
+      // Release resources and remove active session immediately to block concurrent audio chunks
+      voiceResourceLimiter.releaseSession(sessionId);
+      activeSessions.delete(sessionId);
+
+      const errorCode = errorInfo.code || errorInfo.error?.code || 'STT_CONNECT_FAILED';
+      const errorMessage = errorInfo.message || 'Speech recognition connection failed.';
+      const errorDetails = errorInfo.details || errorInfo.error?.message || errorMessage;
+
+      if (fsm && !fsm.isTerminal() && fsm.canTransition(VOICE_STATES.FAILED)) {
+        const previousState = fsm.getState();
+        fsm.transition(VOICE_STATES.FAILED, { reason: errorDetails, code: errorCode });
+        emitStateChange(socket, sessionState, previousState, VOICE_STATES.FAILED, {
+          code: errorCode,
+          reason: errorDetails,
+        });
+      } else if (sessionState) {
+        sessionState.status = VOICE_STATES.FAILED;
+      }
+
+      const alreadyNotified = Boolean(errorInfo._socketNotified || errorInfo.error?._socketNotified);
+      if (!alreadyNotified && socket && typeof socket.emit === 'function') {
+        const errorPayload = {
+          code: errorCode,
+          message: errorMessage,
+          details: errorDetails,
+          recoverable: false,
+          timestamp: new Date().toISOString(),
+        };
+        socket.emit('voice:error', errorPayload);
+        socket.emit('stt-error', errorPayload);
+      }
+
+      if (sttStream && typeof sttStream.close === 'function') {
+        await Promise.resolve(sttStream.close('stt_failed')).catch(() => {});
+      }
+
+      if (conversationId) {
+        await ConversationModel.findByIdAndUpdate(conversationId, {
+          status: 'interrupted',
+          endedAt: new Date(),
+          summary: `Voice session interrupted due to speech recognition failure (${errorCode}).`,
+        }).catch(() => {});
+      }
+    })();
+
+    return sessionState._failurePromise;
+  };
+
+  const attachSessionSttStream = (socket, sessionState) => {
+    const { fsm, turnManager, metrics } = sessionState;
+
+    return createSttStream(
+      socket,
+      async (finalTranscript, confidence, isUncertain) => {
+        try {
+          if (fsm.canTransition(VOICE_STATES.PROCESSING)) {
+            const prevState = fsm.getState();
+            fsm.transition(VOICE_STATES.PROCESSING);
+            emitStateChange(socket, sessionState, prevState, VOICE_STATES.PROCESSING);
+          }
+
+          // Create managed conversational turn with AbortController
+          const activeTurn = turnManager.startTurn({
+            userTranscript: finalTranscript,
+            confidence,
+            isUncertain,
+          });
+
+          // Run safety net check and LLM turn processing in parallel
+          const [safetyFlags, rawResponseText] = await Promise.all([
+            runSafetyNetCheck(finalTranscript, sessionState),
+            callLLM(finalTranscript, sessionState, socket, activeTurn),
+          ]);
+
+          let responseText = rawResponseText;
+          // Phase 5 RED Safety Net Preemption: Immediately override response with emergency protocol
+          const redFlag = Array.isArray(safetyFlags) ? safetyFlags.find((f) => f && (f.severity === 'red' || f.severity === 'RED')) : null;
+          if (redFlag) {
+            console.warn(`🚨 [SAFETY PREEMPTION] Preempting routine dialogue for RED flag '${redFlag.category}'`);
+            try {
+              const dialogueSession = await DialogueSessionModel.findOne({ conversationId: sessionState.conversationId });
+              if (dialogueSession) {
+                responseText = await ClinicalDialogueManager.preemptForSafety(dialogueSession, redFlag);
+              }
+            } catch (e) {
+              console.warn('[Safety Preemption Warning]', e.message);
+            }
+          }
+
+          // Check if turn was cancelled while LLM was processing
+          if (!turnManager.isTurnActive(activeTurn.turnId) || activeTurn.abortController.signal.aborted) {
+            console.log(`[Voice Session] Turn ${activeTurn.turnId} was cancelled; skipping TTS.`);
+            if (fsm.canTransition(VOICE_STATES.LISTENING)) {
+              const prevState = fsm.getState();
+              fsm.transition(VOICE_STATES.LISTENING);
+              emitStateChange(socket, sessionState, prevState, VOICE_STATES.LISTENING);
+            }
+            return;
+          }
+
+          // Transition to GENERATING
+          if (fsm.canTransition(VOICE_STATES.GENERATING)) {
+            fsm.transition(VOICE_STATES.GENERATING);
+            emitStateChange(socket, sessionState, VOICE_STATES.PROCESSING, VOICE_STATES.GENERATING);
+          }
+
+          // Stream TTS synthesis back to client
+          const ttsResult = await streamTTSResponse(responseText, socket, {
+            turnId: activeTurn.turnId,
+            signal: activeTurn.abortController.signal,
+            metricsCollector: metrics,
+          });
+
+          if (ttsResult.aborted) {
+            console.log(`[Voice Session] TTS aborted for turn ${activeTurn.turnId}`);
+          } else {
+            activeTurn.completeTurn();
+          }
+
+          // Transition back to LISTENING once turn is done
+          if (fsm.canTransition(VOICE_STATES.LISTENING)) {
+            fsm.transition(VOICE_STATES.LISTENING);
+            emitStateChange(socket, sessionState, fsm.getState(), VOICE_STATES.LISTENING);
+          }
+        } catch (pipelineErr) {
+          console.error('[Pipeline Error] Post-STT execution error:', pipelineErr);
+          if (fsm.canTransition(VOICE_STATES.LISTENING)) {
+            const prevState = fsm.getState();
+            fsm.transition(VOICE_STATES.LISTENING);
+            emitStateChange(socket, sessionState, prevState, VOICE_STATES.LISTENING);
+          }
+        }
+      },
+      {
+        metricsCollector: metrics,
+        sessionId: socket.id,
+        turnIdSupplier: () => turnManager.getActiveTurn()?.turnId || null,
+        onError: (errInfo) => {
+          handleSessionSttFailure(sessionState, errInfo);
+        },
+        onClose: ({ unexpected, code, reason }) => {
+          if (unexpected && !sessionState._ending && !sessionState._sttFailureHandled) {
+            handleSessionSttFailure(sessionState, {
+              code: 'STT_STREAM_CLOSED',
+              message: 'Speech recognition connection closed unexpectedly.',
+              details: reason || `Close code ${code ?? 'unknown'}`,
+            });
+          }
+        },
+        ...sttOptionsOverrides,
+      }
+    );
+  };
 
   voiceNamespace.on('connection', (socket) => {
     const user = socket.user;
@@ -182,6 +361,7 @@ export const initVoiceSocket = (io) => {
     // 1. START SESSION (Compatible with 'start-session' and 'voice:session:start')
     // =========================================================================
     const handleStartSession = async (data = {}) => {
+      let registeredResource = false;
       try {
         const patientId = user?.patientId || data.patientId;
         const orgId = socket.tenant?.organizationObjectId;
@@ -211,7 +391,7 @@ export const initVoiceSocket = (io) => {
 
         // Verify patient belongs to the same organization if patientId provided
         if (patientId && orgId) {
-          const patientExists = await Patient.findOne({
+          const patientExists = await PatientModel.findOne({
             _id: patientId,
             organizationId: orgId,
           });
@@ -222,7 +402,7 @@ export const initVoiceSocket = (io) => {
           }
 
           // Consent Verification Gatekeeper
-          const consentCheck = await verifyVoiceConsent(orgId, patientId);
+          const consentCheck = await verifyConsentFn(orgId, patientId);
           if (!consentCheck.allowed) {
             console.warn(
               `[Voice Socket Security] Blocked session start: Patient ${patientId} missing required consent: ${consentCheck.missing.join(', ')}`
@@ -241,9 +421,10 @@ export const initVoiceSocket = (io) => {
 
         // Register session in resource limiter
         voiceResourceLimiter.registerSession(socket.id, userId, orgStringId);
+        registeredResource = true;
 
         // Create Mongoose Conversation record with tenant scope
-        const conversation = await Conversation.create({
+        const conversation = await ConversationModel.create({
           patientId: patientId || user?.id,
           organizationId: orgId,
           startedAt: new Date(),
@@ -253,19 +434,16 @@ export const initVoiceSocket = (io) => {
         });
 
         // Join organization room for scoped broadcasting
-        if (orgId && patientId) {
+        if (orgId && patientId && typeof socket.join === 'function') {
           socket.join(`org:${orgId}:patient:${patientId}`);
         }
-
-        // Transition FSM to CONNECTING_STT
-        fsm.transition(VOICE_STATES.CONNECTING_STT);
 
         // Initialize helper managers
         const audioChunkManager = new AudioChunkManager({ sessionId: socket.id, backpressureThreshold: 30 });
         const turnManager = new TurnManager(socket.id);
         const metrics = new VoiceMetricsCollector(socket.id);
 
-        // Initialize complete session state object
+        // Initialize complete session state object (remains CONNECTING_STT until provider open)
         const sessionState = {
           socket,
           sessionId: socket.id,
@@ -273,7 +451,7 @@ export const initVoiceSocket = (io) => {
           patientId: patientId || user?.id,
           organizationId: orgStringId,
           type: data.type || 'daily',
-          status: 'LISTENING',
+          status: VOICE_STATES.CONNECTING_STT,
           history: [],
           audioChunksReceived: 0,
           startedAt: new Date(),
@@ -282,104 +460,54 @@ export const initVoiceSocket = (io) => {
           audioChunkManager,
           turnManager,
           metrics,
+          _ending: false,
+          _sttFailureHandled: false,
         };
 
-        // Create AssemblyAI live STT stream controller
-        sessionState.sttStream = createAssemblyAISTTStream(
-          socket,
-          async (finalTranscript, confidence, isUncertain) => {
-            try {
-              if (fsm.canTransition(VOICE_STATES.PROCESSING)) {
-                fsm.transition(VOICE_STATES.PROCESSING);
-                emitStateChange(socket, sessionState, VOICE_STATES.LISTENING, VOICE_STATES.PROCESSING);
-              }
-
-              // Create managed conversational turn with AbortController
-              const activeTurn = turnManager.startTurn({
-                userTranscript: finalTranscript,
-                confidence,
-                isUncertain,
-              });
-
-              // Run safety net check and LLM turn processing in parallel
-              const [safetyFlags, rawResponseText] = await Promise.all([
-                runSafetyNetCheck(finalTranscript, sessionState),
-                callLLM(finalTranscript, sessionState, socket, activeTurn),
-              ]);
-
-              let responseText = rawResponseText;
-              // Phase 5 RED Safety Net Preemption: Immediately override response with emergency protocol
-              const redFlag = Array.isArray(safetyFlags) ? safetyFlags.find((f) => f && (f.severity === 'red' || f.severity === 'RED')) : null;
-              if (redFlag) {
-                console.warn(`🚨 [SAFETY PREEMPTION] Preempting routine dialogue for RED flag '${redFlag.category}'`);
-                try {
-                  const dialogueSession = await DialogueSession.findOne({ conversationId: sessionState.conversationId });
-                  if (dialogueSession) {
-                    responseText = await ClinicalDialogueManager.preemptForSafety(dialogueSession, redFlag);
-                  }
-                } catch (e) {
-                  console.warn('[Safety Preemption Warning]', e.message);
-                }
-              }
-
-              // Check if turn was cancelled while LLM was processing
-              if (!turnManager.isTurnActive(activeTurn.turnId) || activeTurn.abortController.signal.aborted) {
-                console.log(`[Voice Session] Turn ${activeTurn.turnId} was cancelled; skipping TTS.`);
-                if (fsm.canTransition(VOICE_STATES.LISTENING)) {
-                  fsm.transition(VOICE_STATES.LISTENING);
-                  emitStateChange(socket, sessionState, VOICE_STATES.PROCESSING, VOICE_STATES.LISTENING);
-                }
-                return;
-              }
-
-              // Transition to GENERATING
-              if (fsm.canTransition(VOICE_STATES.GENERATING)) {
-                fsm.transition(VOICE_STATES.GENERATING);
-                emitStateChange(socket, sessionState, VOICE_STATES.PROCESSING, VOICE_STATES.GENERATING);
-              }
-
-              // Stream TTS synthesis back to client
-              const ttsResult = await streamTTSResponse(responseText, socket, {
-                turnId: activeTurn.turnId,
-                signal: activeTurn.abortController.signal,
-                metricsCollector: metrics,
-              });
-
-              if (ttsResult.aborted) {
-                console.log(`[Voice Session] TTS aborted for turn ${activeTurn.turnId}`);
-              } else {
-                activeTurn.completeTurn();
-              }
-
-              // Transition back to LISTENING once turn is done
-              if (fsm.canTransition(VOICE_STATES.LISTENING)) {
-                fsm.transition(VOICE_STATES.LISTENING);
-                emitStateChange(socket, sessionState, fsm.getState(), VOICE_STATES.LISTENING);
-              }
-            } catch (pipelineErr) {
-              console.error('[Pipeline Error] Post-STT execution error:', pipelineErr);
-              if (fsm.canTransition(VOICE_STATES.LISTENING)) {
-                fsm.transition(VOICE_STATES.LISTENING);
-                emitStateChange(socket, sessionState, fsm.getState(), VOICE_STATES.LISTENING);
-              }
-            }
-          },
-          {
-            metricsCollector: metrics,
-            sessionId: socket.id,
-          }
-        );
-
-        // Transition FSM to LISTENING
-        fsm.transition(VOICE_STATES.LISTENING);
+        // Transition FSM to CONNECTING_STT and register active session before opening provider stream
+        fsm.transition(VOICE_STATES.CONNECTING_STT);
+        emitStateChange(socket, sessionState, VOICE_STATES.CONSENT_CHECKED, VOICE_STATES.CONNECTING_STT);
         activeSessions.set(socket.id, sessionState);
+
+        // Create AssemblyAI live STT stream controller
+        sessionState.sttStream = attachSessionSttStream(socket, sessionState);
+
+        try {
+          await sessionState.sttStream.ready;
+        } catch (sttConnectErr) {
+          await handleSessionSttFailure(sessionState, {
+            code: sttConnectErr.code || 'STT_CONNECT_FAILED',
+            message: sttConnectErr.message || 'Failed to establish speech recognition stream.',
+            details: sttConnectErr.details || sttConnectErr.message,
+            error: sttConnectErr,
+          });
+          return;
+        }
+
+        // Guard against disconnect / end-session racing with STT handshake
+        if (
+          !activeSessions.has(socket.id) ||
+          sessionState._ending ||
+          sessionState._sttFailureHandled ||
+          fsm.isTerminal() ||
+          (typeof socket.connected === 'boolean' && !socket.connected)
+        ) {
+          if (sessionState.sttStream && typeof sessionState.sttStream.close === 'function') {
+            await sessionState.sttStream.close('session_aborted_during_connect');
+          }
+          return;
+        }
+
+        // Transition FSM to LISTENING strictly after STT stream is ready
+        fsm.transition(VOICE_STATES.LISTENING);
+        emitStateChange(socket, sessionState, VOICE_STATES.CONNECTING_STT, VOICE_STATES.LISTENING);
 
         console.log(`[Voice Session] Started session ${socket.id} for conversation ${conversation._id}`);
 
         const startedPayload = {
           sessionId: socket.id,
           conversationId: conversation._id,
-          status: 'LISTENING',
+          status: VOICE_STATES.LISTENING,
           timestamp: new Date().toISOString(),
         };
 
@@ -390,7 +518,18 @@ export const initVoiceSocket = (io) => {
         socket.emit('session-started', startedPayload);
       } catch (error) {
         console.error('[Voice Session Error] Failed to start session:', error);
-        socket.emit('voice:error', { message: 'Failed to initialize voice session.' });
+        const existingSession = activeSessions.get(socket.id);
+        if (existingSession) {
+          existingSession._ending = true;
+          if (existingSession.sttStream?.close) {
+            await Promise.resolve(existingSession.sttStream.close('start_session_error')).catch(() => {});
+          }
+          activeSessions.delete(socket.id);
+        }
+        if (registeredResource) {
+          voiceResourceLimiter.releaseSession(socket.id);
+        }
+        socket.emit('voice:error', { code: 'SESSION_START_FAILED', message: 'Failed to initialize voice session.' });
       }
     };
 
@@ -403,7 +542,17 @@ export const initVoiceSocket = (io) => {
     const handleAudioChunk = (chunkData) => {
       const session = activeSessions.get(socket.id);
       if (!session) {
-        return socket.emit('voice:error', { message: 'No active session found. Please start a session first.' });
+        return socket.emit('voice:error', {
+          code: 'NO_ACTIVE_SESSION',
+          message: 'No active session found. Please start a session first.',
+        });
+      }
+
+      if (session.fsm?.isTerminal?.() || session._sttFailureHandled || session._ending) {
+        return socket.emit('voice:error', {
+          code: 'STT_STREAM_CLOSED',
+          message: 'Speech recognition stream is closed or failed.',
+        });
       }
 
       session.audioChunksReceived++;
@@ -420,6 +569,27 @@ export const initVoiceSocket = (io) => {
           rawBuffer = Buffer.isBuffer(chunkData.audio) ? chunkData.audio : Buffer.from(chunkData.audio);
           clientSeq = chunkData.sequence || session.audioChunksReceived;
         } else {
+          return;
+        }
+
+        // Reject audio submission before forwarding if STT is closed, closing, or failed
+        if (!session.sttStream) {
+          return socket.emit('voice:error', {
+            code: 'STT_STREAM_UNAVAILABLE',
+            message: 'Speech recognition stream is unavailable.',
+          });
+        }
+
+        const sttState = session.sttStream.getConnectionState?.() || session.sttStream.getState?.();
+        if (sttState === STT_STATES.CLOSED || sttState === STT_STATES.CLOSING || sttState === STT_STATES.FAILED) {
+          const closedPayload = {
+            code: 'STT_STREAM_CLOSED',
+            message: 'Cannot process audio: speech recognition stream is closed.',
+            recoverable: false,
+            timestamp: new Date().toISOString(),
+          };
+          socket.emit('voice:error', closedPayload);
+          socket.emit('stt-error', closedPayload);
           return;
         }
 
@@ -474,8 +644,16 @@ export const initVoiceSocket = (io) => {
         }
 
         // Enforce AUDIO_RETENTION_MODE: Transient streaming only.
-        if (session.sttStream) {
-          session.sttStream.sendAudioChunk(rawBuffer);
+        const sttSendResult = session.sttStream.sendAudioChunk(rawBuffer);
+        if (sttSendResult && sttSendResult.accepted === false) {
+          const rejectPayload = {
+            code: sttSendResult.reason || 'STT_AUDIO_REJECTED',
+            message: 'Speech recognition rejected audio because the stream is not active.',
+            recoverable: false,
+            timestamp: new Date().toISOString(),
+          };
+          socket.emit('voice:error', rejectPayload);
+          socket.emit('stt-error', rejectPayload);
         }
       } catch (err) {
         console.error('[Voice Session Pipeline Error]:', err);
@@ -550,7 +728,7 @@ export const initVoiceSocket = (io) => {
       }
 
       // Re-verify consent on session recovery
-      const consentCheck = await verifyVoiceConsent(organizationId, patientId);
+      const consentCheck = await verifyConsentFn(organizationId, patientId);
       if (!consentCheck.allowed) {
         sessionRecoveryManager.invalidateToken(resumeToken);
         return socket.emit('voice:session:resume_failed', {
@@ -582,7 +760,7 @@ export const initVoiceSocket = (io) => {
         patientId,
         organizationId,
         type: recoveryData.type || 'daily',
-        status: 'LISTENING',
+        status: VOICE_STATES.CONNECTING_STT,
         history: recoveryData.history || [],
         audioChunksReceived: lastAckSeq || 0,
         startedAt: new Date(recoveryData.startedAt || Date.now()),
@@ -591,6 +769,8 @@ export const initVoiceSocket = (io) => {
         audioChunkManager,
         turnManager,
         metrics,
+        _ending: false,
+        _sttFailureHandled: false,
       };
 
       // Restore clinical dialogue agenda state
@@ -600,67 +780,39 @@ export const initVoiceSocket = (io) => {
         console.warn('[Dialogue Recovery Notice]:', recErr.message);
       }
 
-      sessionState.sttStream = createAssemblyAISTTStream(socket, async (finalTranscript, confidence, isUncertain) => {
-        try {
-          if (fsm.canTransition(VOICE_STATES.PROCESSING)) {
-            fsm.transition(VOICE_STATES.PROCESSING);
-            emitStateChange(socket, sessionState, VOICE_STATES.LISTENING, VOICE_STATES.PROCESSING);
-          }
-
-          const activeTurn = turnManager.startTurn({
-            userTranscript: finalTranscript,
-            confidence,
-            isUncertain,
-          });
-
-          const [safetyFlags, rawResponseText] = await Promise.all([
-            runSafetyNetCheck(finalTranscript, sessionState),
-            callLLM(finalTranscript, sessionState, socket, activeTurn),
-          ]);
-
-          let responseText = rawResponseText;
-          const redFlag = Array.isArray(safetyFlags) ? safetyFlags.find((f) => f && (f.severity === 'red' || f.severity === 'RED')) : null;
-          if (redFlag) {
-            console.warn(`🚨 [SAFETY PREEMPTION] Preempting routine dialogue for RED flag '${redFlag.category}'`);
-            try {
-              const dialogueSession = await DialogueSession.findOne({ conversationId: sessionState.conversationId });
-              if (dialogueSession) {
-                responseText = await ClinicalDialogueManager.preemptForSafety(dialogueSession, redFlag);
-              }
-            } catch (e) {
-              console.warn('[Safety Preemption Warning]', e.message);
-            }
-          }
-
-          if (!turnManager.isTurnActive(activeTurn.turnId) || activeTurn.abortController.signal.aborted) {
-            return;
-          }
-
-          if (fsm.canTransition(VOICE_STATES.GENERATING)) {
-            fsm.transition(VOICE_STATES.GENERATING);
-            emitStateChange(socket, sessionState, VOICE_STATES.PROCESSING, VOICE_STATES.GENERATING);
-          }
-
-          await streamTTSResponse(responseText, socket, {
-            turnId: activeTurn.turnId,
-            signal: activeTurn.abortController.signal,
-            metricsCollector: metrics,
-          });
-
-          activeTurn.completeTurn();
-
-          if (fsm.canTransition(VOICE_STATES.LISTENING)) {
-            fsm.transition(VOICE_STATES.LISTENING);
-            emitStateChange(socket, sessionState, fsm.getState(), VOICE_STATES.LISTENING);
-          }
-        } catch (pipelineErr) {
-          console.error('[Pipeline Recovery Error]:', pipelineErr);
-        }
-      });
-
-      fsm.transition(VOICE_STATES.LISTENING);
       voiceResourceLimiter.registerSession(socket.id, user?.id || 'resumed', organizationId);
       activeSessions.set(socket.id, sessionState);
+      emitStateChange(socket, sessionState, VOICE_STATES.CONSENT_CHECKED, VOICE_STATES.CONNECTING_STT);
+
+      sessionState.sttStream = attachSessionSttStream(socket, sessionState);
+
+      try {
+        await sessionState.sttStream.ready;
+      } catch (sttConnectErr) {
+        await handleSessionSttFailure(sessionState, {
+          code: sttConnectErr.code || 'STT_CONNECT_FAILED',
+          message: sttConnectErr.message || 'Failed to reconnect speech recognition stream.',
+          details: sttConnectErr.details || sttConnectErr.message,
+          error: sttConnectErr,
+        });
+        return;
+      }
+
+      if (
+        !activeSessions.has(socket.id) ||
+        sessionState._ending ||
+        sessionState._sttFailureHandled ||
+        fsm.isTerminal() ||
+        (typeof socket.connected === 'boolean' && !socket.connected)
+      ) {
+        if (sessionState.sttStream?.close) {
+          await sessionState.sttStream.close('resume_aborted_during_connect');
+        }
+        return;
+      }
+
+      fsm.transition(VOICE_STATES.LISTENING);
+      emitStateChange(socket, sessionState, VOICE_STATES.CONNECTING_STT, VOICE_STATES.LISTENING);
 
       console.log(`[Voice Recovery] Successfully recovered session ${socket.id} (Conversation: ${conversationId})`);
 
@@ -668,7 +820,7 @@ export const initVoiceSocket = (io) => {
         sessionId: socket.id,
         conversationId,
         lastAckSeq: lastAckSeq || 0,
-        status: 'LISTENING',
+        status: VOICE_STATES.LISTENING,
         historyLength: sessionState.history.length,
         timestamp: new Date().toISOString(),
       });
@@ -706,10 +858,16 @@ export const initVoiceSocket = (io) => {
         return;
       }
 
+      session._ending = true;
+
       try {
         if (session.fsm.canTransition(VOICE_STATES.FINALIZING)) {
+          const prev = session.fsm.getState();
           session.fsm.transition(VOICE_STATES.FINALIZING);
-          emitStateChange(socket, session, session.status, VOICE_STATES.FINALIZING);
+          emitStateChange(socket, session, prev, VOICE_STATES.FINALIZING);
+        } else if (session.fsm.getState() === VOICE_STATES.CONNECTING_STT && session.fsm.canTransition(VOICE_STATES.ABORTED)) {
+          session.fsm.transition(VOICE_STATES.ABORTED, { reason: 'ended_before_stt_ready' });
+          emitStateChange(socket, session, VOICE_STATES.CONNECTING_STT, VOICE_STATES.ABORTED);
         }
 
         // Cancel active turns and close STT stream
@@ -717,7 +875,7 @@ export const initVoiceSocket = (io) => {
           session.turnManager.cancelActiveTurn('session_ended');
         }
         if (session.sttStream) {
-          session.sttStream.close();
+          await Promise.resolve(session.sttStream.close('session_ended')).catch(() => {});
         }
 
         // Calculate session duration and user speech snippet
@@ -731,7 +889,7 @@ export const initVoiceSocket = (io) => {
           : 'Check-in dialogue completed.';
 
         // Update Conversation record in MongoDB
-        await Conversation.findByIdAndUpdate(session.conversationId, {
+        await ConversationModel.findByIdAndUpdate(session.conversationId, {
           status: 'completed',
           endedAt: new Date(),
           durationSeconds,
@@ -746,7 +904,7 @@ export const initVoiceSocket = (io) => {
 
         // Idempotently project confirmed observations to Checkin
         try {
-          const dialogueSession = await DialogueSession.findOne({ conversationId: session.conversationId });
+          const dialogueSession = await DialogueSessionModel.findOne({ conversationId: session.conversationId });
           if (dialogueSession && dialogueSession.sessionStatus !== 'COMPLETED') {
             await ObservationQualityEngine.projectToCheckin(dialogueSession, dialogueSession.confirmationStatus || 'BYPASSED');
           }
@@ -784,7 +942,9 @@ export const initVoiceSocket = (io) => {
         socket.emit('session-ended', endPayload);
       } catch (error) {
         console.error('[Voice Session Error] Failed to end session:', error);
-        if (session.sttStream) session.sttStream.close();
+        if (session.sttStream) {
+          await Promise.resolve(session.sttStream.close('session_end_error')).catch(() => {});
+        }
         voiceResourceLimiter.releaseSession(socket.id);
         activeSessions.delete(socket.id);
         socket.emit('session-ended', { timestamp: new Date().toISOString() });
@@ -803,11 +963,19 @@ export const initVoiceSocket = (io) => {
       const session = activeSessions.get(socket.id);
 
       if (session) {
-        if (session.sttStream) session.sttStream.close();
+        session._ending = true;
+        if (session.sttStream) {
+          await Promise.resolve(session.sttStream.close('socket_disconnect')).catch(() => {});
+        }
         voiceResourceLimiter.releaseSession(socket.id);
 
         // If session was not completed, prepare recovery state token (5 minute TTL)
-        if (session.fsm.getState() !== VOICE_STATES.COMPLETED && session.fsm.getState() !== VOICE_STATES.ABORTED) {
+        const currentFsmState = session.fsm.getState();
+        if (
+          currentFsmState !== VOICE_STATES.COMPLETED &&
+          currentFsmState !== VOICE_STATES.ABORTED &&
+          currentFsmState !== VOICE_STATES.FAILED
+        ) {
           if (session.fsm.canTransition(VOICE_STATES.RECONNECTING)) {
             session.fsm.transition(VOICE_STATES.RECONNECTING, { reason: 'client_disconnect' });
           }
@@ -832,7 +1000,7 @@ export const initVoiceSocket = (io) => {
           }
 
           // Mark conversation as interrupted in MongoDB
-          await Conversation.findByIdAndUpdate(session.conversationId, {
+          await ConversationModel.findByIdAndUpdate(session.conversationId, {
             status: 'interrupted',
             endedAt: new Date(),
           }).catch(() => {});
